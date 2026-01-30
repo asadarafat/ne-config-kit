@@ -19,7 +19,8 @@ all:
               ansible_network_os: nokia.srlinux.srlinux
               ansible_connection: ansible.netcommon.httpapi
               backup_transport: httpapi
-              httpapi_base_url: "http://172.20.0.12"
+              httpapi_base_url: "https://172.20.0.12"
+              httpapi_validate_certs: false
               httpapi_backup_path: "/jsonrpc"
               httpapi_backup_method: "POST"
               httpapi_backup_body_format: "json"
@@ -38,9 +39,13 @@ all:
               httpapi_response_jmespath: "result[0]"
               httpapi_restore_path: "/jsonrpc"
               httpapi_restore_method: "POST"
-              httpapi_restore_body_format: "raw"
-              httpapi_restore_body: >-
-                {"jsonrpc":"2.0","id":1,"method":"cli","params":{"commands":{{ ['enter candidate'] + (desired_config.splitlines() | reject('equalto','') | list) + ['commit now'] | to_json }} }}
+              httpapi_restore_body_format: "json"
+              httpapi_restore_body:
+                jsonrpc: "2.0"
+                id: 1
+                method: "cli"
+                params:
+                  commands: "{{ ['enter candidate'] + (desired_config.splitlines() | reject('equalto','') | list) + ['commit now'] }}"
         iosxr:
           hosts:
             xr1:
