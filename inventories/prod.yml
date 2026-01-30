@@ -1,0 +1,59 @@
+---
+# Production inventory example. Populate with your real hosts and preferred transports.
+all:
+  children:
+    routers:
+      children:
+        sros:
+          hosts:
+            pe1:
+              ansible_host: 203.0.113.10
+              ansible_network_os: nokia.sros.md
+              ansible_connection: ansible.netcommon.network_cli
+              backup_transport: cli
+              backup_command: "show configuration"
+        srl:
+          hosts:
+            dc1-leaf1:
+              ansible_host: 203.0.113.20
+              ansible_network_os: nokia.srlinux.srlinux
+              ansible_connection: ansible.netcommon.httpapi
+              backup_transport: httpapi
+              httpapi_base_url: "https://203.0.113.20"
+              httpapi_backup_path: "/jsonrpc"
+              httpapi_backup_method: "POST"
+              httpapi_backup_body_format: "json"
+              httpapi_backup_body:
+                jsonrpc: "2.0"
+                id: 1
+                method: "cli"
+                params:
+                  commands:
+                    - "info flat from running"
+                  output-format: "text"
+              httpapi_headers:
+                Content-Type: "application/json"
+                Accept: "application/json"
+              httpapi_response_format: "json"
+              httpapi_response_jmespath: "result[0]"
+              httpapi_restore_path: "/jsonrpc"
+              httpapi_restore_method: "POST"
+              httpapi_restore_body_format: "raw"
+              httpapi_restore_body: >-
+                {"jsonrpc":"2.0","id":1,"method":"cli","params":{"commands":{{ ['enter candidate'] + (desired_config.splitlines() | reject('equalto','') | list) + ['commit now'] | to_json }} }}
+        iosxr:
+          hosts:
+            core1:
+              ansible_host: 203.0.113.30
+              ansible_network_os: cisco.iosxr.iosxr
+              ansible_connection: ansible.netcommon.network_cli
+              backup_transport: cli
+              backup_command: "show running-config"
+        junos:
+          hosts:
+            edge1:
+              ansible_host: 203.0.113.40
+              ansible_network_os: junipernetworks.junos.junos
+              ansible_connection: ansible.netcommon.netconf
+              backup_transport: netconf
+              netconf_filter: "<configuration/>"

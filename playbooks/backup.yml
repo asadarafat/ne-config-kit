@@ -1,0 +1,9 @@
+---
+- name: Backup running configurations
+  hosts: routers
+  gather_facts: false
+  tasks:
+    - name: Run backup workflow
+      ansible.builtin.import_role:
+        name: common
+        tasks_from: backup

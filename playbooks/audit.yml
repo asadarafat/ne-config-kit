@@ -1,0 +1,9 @@
+---
+- name: Audit drift against Git
+  hosts: routers
+  gather_facts: false
+  tasks:
+    - name: Run audit workflow
+      ansible.builtin.import_role:
+        name: common
+        tasks_from: audit

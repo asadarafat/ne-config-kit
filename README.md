@@ -1,64 +1,80 @@
 # ne-config-kit
 
 ne-config-kit is an open-source NetDevOps toolkit for backing up, restoring,
-and managing the configuration state of network elements using Ansible and Git.
+and auditing network configurations using Ansible as the execution engine and
+Git as the source of truth.
 
-It is vendor-agnostic, automation-first, and designed to work equally well
-in labs (containerlab) and real networks.
-
-## What this is
+## Purpose and scope
 - Git-based network configuration backup
 - Deterministic restore and rollback
-- Foundation for drift detection and desired-state workflows
-- Built with Ansible, not a custom daemon or controller
+- Drift detection and audit reporting
+- Text-only configs for clean diffs
+- Works in labs (containerlab) and real networks
+- Vendor-agnostic and automation-first
 
-## What this is NOT
-- Not a full NMS or controller
-- Not a UI-driven product
-- Not tied to a single vendor or NOS
-
-## Core principles
-- Git is the source of truth
-- Automation over polling
-- Explicit intent over implicit state
-- Simple building blocks, composable workflows
-
-## Supported automation models
-- Backup (pull)
-- Restore (push)
-- Audit / drift detection
-- Desired-state enforcement (optional)
+## Non-goals
+- No GUI
+- No database
+- No scheduler
+- No embedded Git operations
+- No dependency on Oxidized, RANCID, or NMS systems
 
 ## Repository layout
 ```
 inventories/
 group_vars/
-host_vars/
 playbooks/
 roles/
 backups/
+docs/
 ```
 
-## Quick start
-1. Clone the repo
-2. Define your inventory
-3. Store credentials securely (Ansible Vault or SSH keys)
-4. Run the backup playbook
-5. Commit configs to Git
+## Git + Ansible workflow
+1. **Backup:** Pull running configs from devices.
+2. **Review:** Inspect changes and commit to Git.
+3. **Audit:** Compare live state with Git-stored config.
+4. **Restore:** Push known-good config back to devices (explicit action).
 
-## Security
-Credentials are never stored in plaintext.
-Ansible Vault, SSH keys, or external secret managers are supported.
+## Quick start (local)
+```
+export ANSIBLE_NET_USERNAME="netops"
+export ANSIBLE_NET_PASSWORD="***"
 
-## Use cases
-- Lab automation (containerlab)
-- Pre/post change validation
-- Disaster recovery
-- Compliance audits
-- GitOps-style network workflows
+ansible-playbook -i inventories/lab.yml playbooks/backup.yml
+ansible-playbook -i inventories/lab.yml playbooks/audit.yml
+ansible-playbook -i inventories/lab.yml playbooks/restore.yml --check
+```
 
-## Roadmap
-- Config normalization
-- Drift detection reports
-- gNMI / NETCONF-first workflows
-- CI/CD examples
+## Restore warning
+Restore is destructive by nature. Always run `--check` and `playbooks/audit.yml`
+first. Do not run restore during unknown network conditions.
+
+## Container usage model
+The container image is a thin Ansible runtime. It does **not** include
+inventories, credentials, or backups. You must mount your repo and provide
+credentials at runtime.
+
+Example:
+```
+docker run --rm -t \
+  -v "$PWD:/work" \
+  -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
+  -w /work \
+  ghcr.io/<owner>/ne-config-kit:latest \
+  -i inventories/lab.yml playbooks/backup.yml
+```
+
+## Security model
+- Credentials are never stored in plaintext.
+- Use Ansible Vault (`group_vars/routers/vault.yml`) for encrypted secrets.
+- Environment variables are supported for CI/CD.
+- Backups are sensitive data; restrict repo access.
+
+See `docs/security.md` for details.
+
+## Documentation
+- `docs/architecture.md` - GitOps-style flow and execution model
+- `docs/security.md` - credential handling and threat model
+
+## License
+MIT (see `LICENSE`).
