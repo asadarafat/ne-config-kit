@@ -1,0 +1,9 @@
+---
+- name: Restore configurations from Git
+  hosts: routers
+  gather_facts: false
+  tasks:
+    - name: Run restore workflow
+      ansible.builtin.import_role:
+        name: common
+        tasks_from: restore

@@ -1,0 +1,85 @@
+---
+- name: Validate backup transport
+  ansible.builtin.assert:
+    that:
+      - backup_transport in ['cli', 'netconf', 'httpapi']
+    fail_msg: "backup_transport must be one of: cli, netconf, httpapi"
+
+- name: Validate HTTP API restore settings
+  ansible.builtin.assert:
+    that:
+      - httpapi_base_url | length > 0
+      - httpapi_restore_path | length > 0
+    fail_msg: "httpapi_base_url and httpapi_restore_path must be set for HTTP API restores"
+  when: backup_transport == 'httpapi'
+
+- name: Check for desired config file
+  ansible.builtin.stat:
+    path: "{{ backup_root }}/{{ inventory_hostname }}/{{ backup_filename }}"
+  delegate_to: localhost
+  register: desired_stat
+
+- name: Ensure desired config exists
+  ansible.builtin.assert:
+    that:
+      - desired_stat.stat.exists
+    fail_msg: "Missing desired config at {{ backup_root }}/{{ inventory_hostname }}/{{ backup_filename }}"
+
+- name: Read desired config
+  ansible.builtin.slurp:
+    src: "{{ backup_root }}/{{ inventory_hostname }}/{{ backup_filename }}"
+  delegate_to: localhost
+  register: desired_blob
+
+- name: Decode desired config
+  ansible.builtin.set_fact:
+    desired_config: "{{ desired_blob.content | b64decode }}"
+
+- name: Ensure desired config is not empty
+  ansible.builtin.assert:
+    that:
+      - desired_config | length > 0
+    fail_msg: "Desired config file is empty. Restore aborted."
+
+- name: Apply config via CLI
+  ansible.netcommon.cli_config:
+    config: "{{ desired_config }}"
+    replace: "{{ cli_config_replace }}"
+    diff_match: "{{ cli_diff_match }}"
+    save_when: "{{ cli_save_when }}"
+  when: backup_transport == 'cli'
+
+- name: Apply config via NETCONF
+  ansible.netcommon.netconf_config:
+    target: running
+    content: "{{ desired_config }}"
+    default_operation: merge
+  when: backup_transport == 'netconf'
+
+- name: Apply config via HTTP API
+  ansible.builtin.uri:
+    url: "{{ httpapi_base_url }}{{ httpapi_restore_path }}"
+    method: "{{ httpapi_restore_method }}"
+    user: "{{ httpapi_username | default(ansible_user, true) | default(omit, true) }}"
+    password: "{{ httpapi_password | default(ansible_password, true) | default(omit, true) }}"
+    headers: "{{ httpapi_headers | default(omit) }}"
+    validate_certs: "{{ httpapi_validate_certs }}"
+    force_basic_auth: "{{ httpapi_force_basic_auth }}"
+    body: >-
+      {{
+        httpapi_restore_body
+        if (httpapi_restore_body is defined and httpapi_restore_body is not none)
+        else desired_config
+      }}
+    body_format: "{{ httpapi_restore_body_format | default(httpapi_body_format, true) | default(omit, true) }}"
+    status_code: "{{ httpapi_restore_expected_status | default(httpapi_expected_status, true) | default(omit, true) }}"
+  delegate_to: localhost
+  when: backup_transport == 'httpapi' and not ansible_check_mode
+
+- name: Verify post-restore state via audit
+  ansible.builtin.import_role:
+    name: common
+    tasks_from: audit
+  vars:
+    audit_fail_on_drift: "{{ not ansible_check_mode }}"
+  when: restore_verify | default(true)
