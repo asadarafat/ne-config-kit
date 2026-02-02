@@ -1,14 +1,15 @@
 ---
-- name: Backup running configurations
+- name: Restore configurations from Git
   hosts: "{{ target_hosts | default('nokia_srlinux') }}"
   gather_facts: false
   vars:
     ansible_connection: local
   vars_files:
+    - "{{ lookup('first_found', ['/clab/nck-config.yaml', '/clab/example/nck-config.yaml', playbook_dir ~ '/../../../example/nck-config.yaml']) }}"
     - ../group_vars/all.yml
     - ../group_vars/nokia_srlinux.yml
   tasks:
-    - name: Run backup workflow
+    - name: Run restore workflow
       ansible.builtin.import_role:
         name: common
-        tasks_from: backup
+        tasks_from: restore

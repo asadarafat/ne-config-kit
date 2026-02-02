@@ -14,7 +14,7 @@ ansible_become: false
 # Backup and restore defaults
 backup_transport: cli            # cli | netconf | httpapi
 backup_command: "show running-config"
-backup_root: "{{ playbook_dir ~ '/../backups' }}"
+backup_root: "/backups"
 backup_filename: "running.conf"
 
 # Normalization patterns remove volatile lines to reduce churn

@@ -3,8 +3,6 @@
 ansible_connection: local
 
 backup_transport: httpapi
-backup_root: "/work/backups"
-backup_filename: "running.conf"
 
 httpapi_base_url: "https://{{ ansible_host }}"
 httpapi_validate_certs: false

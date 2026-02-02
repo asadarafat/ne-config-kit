@@ -1,0 +1,17 @@
+---
+# Global backup location (override per environment as needed).
+backup_root: "/backups"
+backup_filename: "running.conf"
+
+# Credentials keyed by containerlab node kind.
+clab_kind_credentials:
+  nokia_srlinux:
+    username: admin
+    password: NokiaSrl1!
+
+# Optional host-specific overrides (take precedence over kind defaults).
+# clab_host_credentials:
+#   clab-ne-config-kit-example-srl1:
+#     username: admin2
+#     password: Srl1Diff!
+clab_host_credentials: {}

@@ -21,10 +21,8 @@ Git as the source of truth.
 
 ## Repository layout
 ```
-inventories/
-group_vars/
-playbooks/
-roles/
+example/
+image/ansible-config/
 backups/
 docs/
 ```
@@ -35,14 +33,15 @@ docs/
 3. **Audit:** Compare live state with Git-stored config.
 4. **Restore:** Push known-good config back to devices (explicit action).
 
-## Quick start (local)
+## Quick start (containerlab)
+1. Update `example/nck-config.yaml` with credentials and backup path.
+2. Deploy the lab and run a backup from the runner container:
 ```
-export ANSIBLE_NET_USERNAME="netops"
-export ANSIBLE_NET_PASSWORD="***"
+clab deploy -t example/clab-topo.clab.yml --reconfigure
 
-ansible-playbook -i inventories/lab.yml playbooks/backup.yml
-ansible-playbook -i inventories/lab.yml playbooks/audit.yml
-ansible-playbook -i inventories/lab.yml playbooks/restore.yml --check
+docker exec -w /work clab-ne-config-kit-example-nck \
+  ansible-playbook -i /clab/clab-ne-config-kit-example/ansible-inventory.yml \
+  playbooks/backup.yml --limit clab-ne-config-kit-example-srl1
 ```
 
 ## Restore warning
@@ -50,23 +49,22 @@ Restore is destructive by nature. Always run `--check` and `playbooks/audit.yml`
 first. Do not run restore during unknown network conditions.
 
 ## Container usage model
-The container image is a thin Ansible runtime. It does **not** include
-inventories, credentials, or backups. You must mount your repo and provide
-credentials at runtime.
+The container image ships with the Ansible workspace baked in under `/work`.
+Mount only runtime inputs (containerlab output + backups) and run the playbooks.
 
 Example:
 ```
 docker run --rm -t \
-  -v "$PWD:/work" \
-  -v "$HOME/.ssh:/home/ansible/.ssh:ro" \
-  -w /work \
+  -v "$PWD/example:/clab:ro" \
+  -v "$PWD/backups:/backups" \
   ghcr.io/<owner>/ne-config-kit:latest \
-  -i inventories/lab.yml playbooks/backup.yml
+  -i /clab/clab-ne-config-kit-example/ansible-inventory.yml playbooks/backup.yml \
+  --limit clab-ne-config-kit-example-srl1
 ```
 
 ## Security model
-- Credentials are never stored in plaintext.
-- Use Ansible Vault (`group_vars/routers/vault.yml`) for encrypted secrets.
+- Credentials can be supplied via `nck-config.yaml` (plaintext for labs) or
+  Ansible Vault (`image/ansible-config/group_vars/routers/vault.yml`) for encrypted secrets.
 - Environment variables are supported for CI/CD.
 - Backups are sensitive data; restrict repo access.
 

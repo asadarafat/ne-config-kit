@@ -1,0 +1,18 @@
+---
+# Values are loaded from nck-config.yaml (via vars_files in playbooks).
+# This file derives per-host credentials from the provided maps.
+
+# Resolve credentials based on the host's kind (group name).
+clab_kind: >-
+  {{
+    ((clab_kind_credentials | default({}) | dict2items | map(attribute='key') | list)
+      | intersect(group_names) | first | default(''))
+  }}
+clab_kind_creds: "{{ (clab_kind_credentials | default({})).get(clab_kind, {}) }}"
+clab_host_creds: "{{ (clab_host_credentials | default({})).get(inventory_hostname, {}) }}"
+clab_creds: "{{ clab_host_creds if (clab_host_creds | length > 0) else clab_kind_creds }}"
+
+ansible_user: "{{ clab_creds.username | default(omit, true) }}"
+ansible_password: "{{ clab_creds.password | default(omit, true) }}"
+httpapi_username: "{{ clab_creds.username | default(omit, true) }}"
+httpapi_password: "{{ clab_creds.password | default(omit, true) }}"

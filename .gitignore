@@ -7,7 +7,7 @@
 
 # Containerlab runtime output
 /example/clab-ne-config-kit-example/
-example/clab-topo.yml.annotations.json
+example/*.clab.yml.annotations.json
 
 # Vault password files
 .vault_pass

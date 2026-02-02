@@ -12,10 +12,9 @@ topology:
       # Keep the runner container alive for interactive use.
       entrypoint: sleep infinity
       binds:
-        # Mount only the example Ansible workspace into /work.
-        - ./ansible-config:/work
-        # Mount the example directory so /clab/clab-ne-config-kit-example appears after deploy.
+        # Bake the example Ansible workspace into the image; mount runtime artifacts and backups only.
         - ./:/clab:ro
+        - ../backups:/backups
     srl1:
       kind: nokia_srlinux
       image: ghcr.io/nokia/srlinux:latest

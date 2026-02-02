@@ -27,8 +27,9 @@ restore <-------------------------------------- audit
 - All files are text-based to remain diff-friendly in Git.
 
 ## Separation of concerns
-- **Repo:** Playbooks, roles, inventories, and backups live in Git.
+- **Repo:** The baked Ansible workspace lives under `image/ansible-config`,
+  while runtime inputs live under `example/` and `backups/`.
 - **Runtime:** Credentials and runtime state are provided at execution time
-  (Vault, SSH keys, or environment variables).
-- **Container:** The container image is a thin Ansible runtime and does not
-  embed inventories, credentials, or backups.
+  (Vault, SSH keys, or `example/nck-config.yaml`).
+- **Container:** The image embeds the Ansible workspace only; inventories,
+  credentials, and backups are supplied at runtime via `/clab` and `/backups`.

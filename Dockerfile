@@ -44,6 +44,9 @@ RUN useradd -m -u 10001 ansible \
       'AllowUsers ansible' \
       > /etc/ssh/sshd_config.d/nck.conf
 
+# Bake the example Ansible workspace into the image for a no-mount workflow.
+COPY --chown=ansible:ansible image/ansible-config /work
+
 # Non-root user for safer defaults
 USER ansible
 WORKDIR /work
