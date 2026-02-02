@@ -21,76 +21,15 @@
   when: backup_transport == 'httpapi'
 
 - name: Collect running config via CLI
-  ansible.netcommon.cli_command:
-    command: "{{ backup_command }}"
-  register: cli_result
+  ansible.builtin.include_tasks: backup_cli.yml
   when: backup_transport == 'cli'
 
 - name: Collect running config via NETCONF
-  ansible.netcommon.netconf_get:
-    source: "{{ netconf_source }}"
-    filter: "{{ netconf_filter | default(omit, true) }}"
-  register: netconf_result
+  ansible.builtin.include_tasks: backup_netconf.yml
   when: backup_transport == 'netconf'
 
 - name: Collect running config via HTTP API
-  ansible.builtin.uri:
-    url: "{{ httpapi_base_url }}{{ httpapi_backup_path }}"
-    method: "{{ httpapi_backup_method }}"
-    user: "{{ httpapi_username | default(ansible_user, true) | default(omit, true) }}"
-    password: "{{ httpapi_password | default(ansible_password, true) | default(omit, true) }}"
-    headers: "{{ httpapi_headers | default(omit) }}"
-    validate_certs: "{{ httpapi_validate_certs }}"
-    force_basic_auth: "{{ httpapi_force_basic_auth }}"
-    body: "{{ httpapi_backup_body | default(omit, true) }}"
-    body_format: "{{ httpapi_backup_body_format | default(httpapi_body_format, true) | default(omit, true) }}"
-    status_code: "{{ httpapi_backup_expected_status | default(httpapi_expected_status, true) | default(omit, true) }}"
-    return_content: true
-  register: httpapi_result
-  delegate_to: localhost
-  when: backup_transport == 'httpapi'
-
-- name: Set raw config from CLI output
-  ansible.builtin.set_fact:
-    raw_config: >-
-      {{
-        (cli_result.stdout | first)
-        if (cli_result.stdout is iterable and (cli_result.stdout is not string))
-        else cli_result.stdout
-      }}
-  when: backup_transport == 'cli'
-
-- name: Set raw config from NETCONF output
-  ansible.builtin.set_fact:
-    raw_config: >-
-      {{
-        (netconf_result.stdout | first)
-        if (netconf_result.stdout is iterable and (netconf_result.stdout is not string))
-        else (netconf_result.stdout | default(netconf_result.rpc_reply))
-      }}
-  when: backup_transport == 'netconf'
-
-- name: Capture HTTP API payload
-  ansible.builtin.set_fact:
-    httpapi_payload: >-
-      {{
-        httpapi_result.json
-        if (httpapi_response_format == 'json' and httpapi_result.json is defined)
-        else httpapi_result.content
-      }}
-  when: backup_transport == 'httpapi'
-
-- name: Set raw config from HTTP API output
-  ansible.builtin.set_fact:
-    raw_config: >-
-      {{
-        (httpapi_payload | json_query(httpapi_response_jmespath))
-        if (httpapi_response_format == 'json' and httpapi_response_jmespath is defined and httpapi_response_jmespath)
-        else (
-          (httpapi_payload | to_nice_json) if (httpapi_response_format == 'json')
-          else (httpapi_payload | string)
-        )
-      }}
+  ansible.builtin.include_tasks: backup_httpapi.yml
   when: backup_transport == 'httpapi'
 
 - name: Ensure a config payload was collected

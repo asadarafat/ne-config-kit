@@ -1,0 +1,47 @@
+---
+- name: Collect running config via HTTP API
+  ansible.builtin.uri:
+    url: "{{ httpapi_base_url }}{{ httpapi_backup_path }}"
+    method: "{{ httpapi_backup_method }}"
+    user: "{{ httpapi_username | default(ansible_user, true) | default(omit, true) }}"
+    password: "{{ httpapi_password | default(ansible_password, true) | default(omit, true) }}"
+    headers: "{{ httpapi_headers | default(omit) }}"
+    validate_certs: "{{ httpapi_validate_certs }}"
+    force_basic_auth: "{{ httpapi_force_basic_auth }}"
+    body: "{{ httpapi_backup_body | default(omit, true) }}"
+    body_format: "{{ httpapi_backup_body_format | default(httpapi_body_format, true) | default(omit, true) }}"
+    status_code: "{{ httpapi_backup_expected_status | default(httpapi_expected_status, true) | default(omit, true) }}"
+    return_content: true
+  register: httpapi_result
+  delegate_to: localhost
+
+- name: Capture HTTP API payload
+  ansible.builtin.set_fact:
+    httpapi_payload: >-
+      {{
+        httpapi_result.json
+        if (httpapi_response_format == 'json' and httpapi_result.json is defined)
+        else httpapi_result.content
+      }}
+
+- name: Set raw config from HTTP API output (result[0] fast-path)
+  ansible.builtin.set_fact:
+    raw_config: "{{ httpapi_payload['result'][0] }}"
+  when:
+    - httpapi_response_format == 'json'
+    - (httpapi_response_jmespath | default('')) == 'result[0]'
+    - httpapi_payload is mapping
+    - "'result' in httpapi_payload"
+
+- name: Set raw config from HTTP API output
+  ansible.builtin.set_fact:
+    raw_config: >-
+      {{
+        (httpapi_payload | json_query(httpapi_response_jmespath))
+        if (httpapi_response_format == 'json' and httpapi_response_jmespath is defined and httpapi_response_jmespath)
+        else (
+          (httpapi_payload | to_nice_json) if (httpapi_response_format == 'json')
+          else (httpapi_payload | string)
+        )
+      }}
+  when: raw_config is not defined

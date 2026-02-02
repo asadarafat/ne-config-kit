@@ -1,8 +1,8 @@
 ---
 name: ne-config-kit-example
 
-# Minimal containerlab topology: ne-config-kit runner + one SR OS device.
-# Adjust the SROS image to match your lab build.
+# Minimal containerlab topology: ne-config-kit runner + one SR Linux device.
+# Adjust the SR Linux image tag to match your lab build.
 
 topology:
   nodes:
@@ -10,10 +10,12 @@ topology:
       kind: linux
       image: ghcr.io/asadarafat/ne-config-kit:latest
       # Keep the runner container alive for interactive use.
-      cmd: "sleep infinity"
+      entrypoint: sleep infinity
       binds:
         # Mount only the example Ansible workspace into /work.
         - ./ansible-config:/work
+        # Mount containerlab runtime artifacts (including ansible-inventory.yml).
+        - ./clab-ne-config-kit-example:/clab:ro
     srl1:
       kind: nokia_srlinux
       image: ghcr.io/nokia/srlinux:latest

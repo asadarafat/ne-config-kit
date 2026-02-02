@@ -1,0 +1,14 @@
+# Ansible runtime artifacts
+*.retry
+
+# Local backups (if not stored in Git)
+/backups/**
+!/backups/.gitkeep
+
+# Containerlab runtime output
+/example/clab-ne-config-kit-example/
+example/clab-topo.yml.annotations.json
+
+# Vault password files
+.vault_pass
+**/.vault_pass

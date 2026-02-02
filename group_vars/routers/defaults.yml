@@ -2,7 +2,9 @@
 # Common defaults for router devices. Override per host/group as needed.
 
 # Credentials (no plaintext in repo). Prefer Vault, SSH keys, or env vars.
-ansible_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') | default(omit, true) }}"
+ansible_user: >-
+  {{ (vault_ansible_user | default(lookup('env', 'ANSIBLE_NET_USERNAME'), true))
+     | default(omit, true) }}
 ansible_password: >-
   {{ (vault_ansible_password | default(lookup('env', 'ANSIBLE_NET_PASSWORD'), true))
      | default(omit, true) }}
