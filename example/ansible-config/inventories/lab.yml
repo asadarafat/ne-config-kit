@@ -16,6 +16,8 @@ all:
               httpapi_base_url: "https://172.20.20.5"
               httpapi_validate_certs: false
               httpapi_force_basic_auth: true
+              httpapi_username: admin
+              httpapi_password: NokiaSrl1!
               httpapi_backup_path: "/jsonrpc"
               httpapi_backup_method: "POST"
               httpapi_backup_body_format: "json"

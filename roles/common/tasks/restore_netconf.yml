@@ -1,0 +1,6 @@
+---
+- name: Apply config via NETCONF
+  ansible.netcommon.netconf_config:
+    target: running
+    content: "{{ desired_config }}"
+    default_operation: merge

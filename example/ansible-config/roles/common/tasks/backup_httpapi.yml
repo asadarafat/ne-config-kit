@@ -3,8 +3,8 @@
   ansible.builtin.uri:
     url: "{{ httpapi_base_url }}{{ httpapi_backup_path }}"
     method: "{{ httpapi_backup_method }}"
-    user: "{{ httpapi_username | default(ansible_user, true) | default(omit, true) }}"
-    password: "{{ httpapi_password | default(ansible_password, true) | default(omit, true) }}"
+    url_username: "{{ _httpapi_username | default(omit, true) }}"
+    url_password: "{{ _httpapi_password | default(omit, true) }}"
     headers: "{{ httpapi_headers | default(omit) }}"
     validate_certs: "{{ httpapi_validate_certs }}"
     force_basic_auth: "{{ httpapi_force_basic_auth }}"
@@ -14,6 +14,10 @@
     return_content: true
   register: httpapi_result
   delegate_to: localhost
+  vars:
+    _orig_host: "{{ inventory_hostname }}"
+    _httpapi_username: "{{ httpapi_username | default(hostvars[_orig_host].ansible_user, true) | default(omit, true) }}"
+    _httpapi_password: "{{ httpapi_password | default(hostvars[_orig_host].ansible_password, true) | default(omit, true) }}"
 
 - name: Capture HTTP API payload
   ansible.builtin.set_fact:

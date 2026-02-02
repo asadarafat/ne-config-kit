@@ -1,7 +1,12 @@
 ---
 - name: Restore configurations from Git
-  hosts: routers
+  hosts: "{{ target_hosts | default('nokia_srlinux') }}"
   gather_facts: false
+  vars:
+    ansible_connection: local
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/nokia_srlinux.yml
   tasks:
     - name: Run restore workflow
       ansible.builtin.import_role:

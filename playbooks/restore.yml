@@ -1,6 +1,6 @@
 ---
 - name: Restore configurations from Git
-  hosts: routers
+  hosts: "{{ target_hosts | default('routers') }}"
   gather_facts: false
   tasks:
     - name: Run restore workflow

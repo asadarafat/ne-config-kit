@@ -102,7 +102,7 @@
     path: "{{ item }}"
     state: absent
   delegate_to: localhost
-  loop: "{{ [desired_tmp.path | default(''), live_tmp.path | default('')] | select('length') | list }}"
+  loop: "{{ [desired_tmp.path | default(''), live_tmp.path | default('')] | reject('equalto','') | list }}"
   when: drift_detected and (audit_show_diff | default(true)) and (audit_cleanup_temp | default(true))
 
 - name: Fail when drift is detected
