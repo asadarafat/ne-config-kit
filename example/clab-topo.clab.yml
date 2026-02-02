@@ -14,8 +14,8 @@ topology:
       binds:
         # Mount only the example Ansible workspace into /work.
         - ./ansible-config:/work
-        # Mount containerlab runtime artifacts (including ansible-inventory.yml).
-        - ./clab-ne-config-kit-example:/clab:ro
+        # Mount the example directory so /clab/clab-ne-config-kit-example appears after deploy.
+        - ./:/clab:ro
     srl1:
       kind: nokia_srlinux
       image: ghcr.io/nokia/srlinux:latest
