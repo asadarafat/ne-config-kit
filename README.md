@@ -34,15 +34,17 @@ docs/
 4. **Restore:** Push known-good config back to devices (explicit action).
 
 ## Quick start (containerlab)
-1. Update `example/nck-config.yaml` with credentials and backup path.
-2. Deploy the lab and run a backup from the runner container:
+1. Update `example/nck-config.yaml` (lab name, credentials, and backup path).
+2. Deploy the lab and run NCK as a standalone container:
 ```
 clab deploy -t example/clab-topo.clab.yml --reconfigure
 
-docker exec -w /work clab-ne-config-kit-example-nck \
-  ansible-playbook -i /clab/clab-ne-config-kit-example/ansible-inventory.yml \
-  playbooks/backup.yml --limit clab-ne-config-kit-example-srl1
+docker run --rm -t \
+  -v "$PWD/example:/clab:ro" \
+  -v "$PWD/backups:/backups" \
+  ghcr.io/<owner>/ne-config-kit:latest backup
 ```
+Use `restore --check` or `audit` as needed.
 
 ## Restore warning
 Restore is destructive by nature. Always run `--check` and `playbooks/audit.yml`
@@ -57,10 +59,10 @@ Example:
 docker run --rm -t \
   -v "$PWD/example:/clab:ro" \
   -v "$PWD/backups:/backups" \
-  ghcr.io/<owner>/ne-config-kit:latest \
-  -i /clab/clab-ne-config-kit-example/ansible-inventory.yml playbooks/backup.yml \
-  --limit clab-ne-config-kit-example-srl1
+  ghcr.io/<owner>/ne-config-kit:latest backup
 ```
+Override the config path with `-e NCK_CONFIG=/clab/nck-config.yaml` or pass
+extra Ansible flags after the command (for example `restore --check`).
 
 ## Security model
 - Credentials can be supplied via `nck-config.yaml` (plaintext for labs) or

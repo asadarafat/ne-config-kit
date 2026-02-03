@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: nck <backup|restore|audit> [ansible-playbook args]
+       nck ansible-playbook <args>
+
+Reads nck-config.yaml and runs the selected playbook using the
+containerlab-generated inventory.
+USAGE
+}
+
+cmd="${1:-backup}"
+shift || true
+
+case "$cmd" in
+  backup|restore|audit)
+    ;;
+  ansible-playbook)
+    exec ansible-playbook "$@"
+    ;;
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage
+    exit 1
+    ;;
+esac
+
+config=""
+if [[ -n "${NCK_CONFIG:-}" ]] && [[ -f "$NCK_CONFIG" ]]; then
+  config="$NCK_CONFIG"
+else
+  for candidate in /clab/nck-config.yaml /clab/example/nck-config.yaml /work/nck-config.yaml; do
+    if [[ -f "$candidate" ]]; then
+      config="$candidate"
+      break
+    fi
+  done
+fi
+
+if [[ -z "$config" ]]; then
+  echo "nck-config.yaml not found. Set NCK_CONFIG or mount /clab." >&2
+  exit 1
+fi
+
+read -r inventory target_hosts <<<"$(python - "$config" <<'PY'
+import sys
+try:
+    import yaml
+except Exception:
+    sys.stderr.write("PyYAML is required in the container image.\n")
+    sys.exit(2)
+
+path = sys.argv[1]
+with open(path, 'r') as f:
+    cfg = yaml.safe_load(f) or {}
+
+inv = (cfg.get('clab_inventory') or '').strip()
+lab = (cfg.get('clab_lab_name') or '').strip()
+if not inv and lab:
+    inv = f"/clab/clab-{lab}/ansible-inventory.yml"
+
+target = cfg.get('target_hosts') or ''
+if isinstance(target, list):
+    target = ":".join(str(x) for x in target if x)
+else:
+    target = str(target)
+
+print(inv.strip(), target.strip())
+PY
+)"
+
+if [[ -z "$inventory" ]]; then
+  echo "clab_inventory not set and clab_lab_name missing in $config" >&2
+  exit 1
+fi
+
+if [[ ! -f "$inventory" ]]; then
+  echo "Inventory not found at $inventory" >&2
+  exit 1
+fi
+
+args=("-i" "$inventory" "playbooks/${cmd}.yml")
+if [[ -n "$target_hosts" ]]; then
+  args+=("-e" "target_hosts=${target_hosts}")
+fi
+
+exec ansible-playbook "${args[@]}" "$@"

@@ -23,6 +23,7 @@ RUN apt-get update \
 
 RUN pip install --no-cache-dir \
       "ansible-core==${ANSIBLE_CORE_VERSION}" \
+      pyyaml \
       ncclient \
       jmespath
 
@@ -51,7 +52,9 @@ COPY --chown=ansible:ansible image/ansible-config /work
 USER ansible
 WORKDIR /work
 
-ENTRYPOINT ["ansible-playbook"]
-CMD ["--version"]
+ENV PATH="/work/bin:${PATH}"
+
+ENTRYPOINT ["nck"]
+CMD ["backup"]
 
 EXPOSE 22

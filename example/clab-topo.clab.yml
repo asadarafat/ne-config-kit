@@ -1,20 +1,11 @@
 ---
 name: ne-config-kit-example
 
-# Minimal containerlab topology: ne-config-kit runner + one SR Linux device.
-# Adjust the SR Linux image tag to match your lab build.
+# Minimal containerlab topology: one SR Linux device.
+# Run the NCK container separately (see README).
 
 topology:
   nodes:
-    nck:
-      kind: linux
-      image: ghcr.io/asadarafat/ne-config-kit:latest
-      # Keep the runner container alive for interactive use.
-      entrypoint: sleep infinity
-      binds:
-        # Bake the example Ansible workspace into the image; mount runtime artifacts and backups only.
-        - ./:/clab:ro
-        - ../backups:/backups
     srl1:
       kind: nokia_srlinux
       image: ghcr.io/nokia/srlinux:latest

@@ -6,7 +6,7 @@
 !/backups/.gitkeep
 
 # Containerlab runtime output
-/example/clab-ne-config-kit-example/
+/example/clab-*/
 example/*.clab.yml.annotations.json
 
 # Vault password files

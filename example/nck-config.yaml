@@ -1,4 +1,12 @@
 ---
+# Containerlab runtime inputs.
+# Use either clab_inventory or clab_lab_name to locate the generated inventory.
+clab_lab_name: "ne-config-kit-example"
+# clab_inventory: "/clab/clab-ne-config-kit-example/ansible-inventory.yml"
+
+# Target selection (Ansible host pattern). Use "all" to back up the whole lab.
+target_hosts: "nokia_srlinux"
+
 # Global backup location (override per environment as needed).
 backup_root: "/backups"
 backup_filename: "running.conf"
