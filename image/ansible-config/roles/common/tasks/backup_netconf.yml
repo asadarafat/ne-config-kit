@@ -4,6 +4,7 @@
     source: "{{ netconf_source }}"
     filter: "{{ netconf_filter | default(omit, true) }}"
   register: netconf_result
+  check_mode: false
 
 - name: Set raw config from NETCONF output
   ansible.builtin.set_fact:

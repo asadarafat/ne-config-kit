@@ -60,6 +60,7 @@
     suffix: ".desired.conf"
   delegate_to: localhost
   register: desired_tmp
+  check_mode: false
   when: drift_detected and (audit_show_diff | default(true))
 
 - name: Create temp file for live config
@@ -68,6 +69,7 @@
     suffix: ".live.conf"
   delegate_to: localhost
   register: live_tmp
+  check_mode: false
   when: drift_detected and (audit_show_diff | default(true))
 
 - name: Write desired config to temp file
@@ -75,6 +77,7 @@
     dest: "{{ desired_tmp.path }}"
     content: "{{ desired_config | trim }}\n"
   delegate_to: localhost
+  check_mode: false
   when: drift_detected and (audit_show_diff | default(true))
 
 - name: Write live config to temp file
@@ -82,6 +85,7 @@
     dest: "{{ live_tmp.path }}"
     content: "{{ normalized_config | trim }}\n"
   delegate_to: localhost
+  check_mode: false
   when: drift_detected and (audit_show_diff | default(true))
 
 - name: Diff desired vs live config
@@ -90,6 +94,7 @@
   register: diff_result
   changed_when: false
   failed_when: false
+  check_mode: false
   when: drift_detected and (audit_show_diff | default(true))
 
 - name: Show drift diff
@@ -103,6 +108,7 @@
     state: absent
   delegate_to: localhost
   loop: "{{ [desired_tmp.path | default(''), live_tmp.path | default('')] | reject('equalto','') | list }}"
+  check_mode: false
   when: drift_detected and (audit_show_diff | default(true)) and (audit_cleanup_temp | default(true))
 
 - name: Fail when drift is detected

@@ -6,6 +6,8 @@ clab_lab_name: "ne-config-kit-example"
 
 # Target selection (Ansible host pattern). Use "all" to back up the whole lab.
 target_hosts: "nokia_srlinux"
+# Optional: force kind resolution when inventory groups don't match credentials.
+# clab_kind: "nokia_srlinux"
 
 # Global backup location (override per environment as needed).
 backup_root: "/backups"

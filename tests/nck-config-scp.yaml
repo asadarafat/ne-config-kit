@@ -1,0 +1,13 @@
+---
+clab_inventory: "/tests/inventory.yml"
+target_hosts: "testdevice"
+backup_root: "/backups/scp"
+backup_filename: "running.conf"
+
+backup_transport: scp
+scp_remote_path: "/tmp/srsim.conf"
+scp_port: 2222
+scp_username: "ansible"
+scp_password: "ansible"
+scp_extra_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+scp_no_log: false

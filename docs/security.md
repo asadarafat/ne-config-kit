@@ -20,8 +20,8 @@ network topology details. Treat the `backups/` directory as sensitive data:
 - **Misuse of restore:** Pushing an incorrect config can cause outages.
 
 ## Operational safety
-- Restore is destructive by nature. Always run `playbooks/restore.yml --check`
-  and `playbooks/audit.yml` before applying changes.
+- Restore is destructive by nature. Always run `restore --check`
+  and `audit` before applying changes.
 - Audit exits non-zero on drift to make CI/CD failures explicit.
 - The container image embeds the Ansible workspace only. Inventories, credentials,
   and backups are provided at runtime (via `/clab` and `nck-config.yaml`).

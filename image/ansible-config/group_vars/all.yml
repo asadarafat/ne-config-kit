@@ -3,6 +3,7 @@
 # This file derives per-host credentials from the provided maps.
 
 # Resolve credentials based on the host's kind (group name).
+# To force a specific kind, set clab_kind in nck-config.yaml.
 clab_kind: >-
   {{
     ((clab_kind_credentials | default({}) | dict2items | map(attribute='key') | list)

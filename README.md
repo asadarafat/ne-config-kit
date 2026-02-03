@@ -46,8 +46,14 @@ docker run --rm -t \
 ```
 Use `restore --check` or `audit` as needed.
 
+## Tests
+Run the regression test suite:
+```
+make test
+```
+
 ## Restore warning
-Restore is destructive by nature. Always run `--check` and `playbooks/audit.yml`
+Restore is destructive by nature. Always run `restore --check` and `audit`
 first. Do not run restore during unknown network conditions.
 
 ## Container usage model

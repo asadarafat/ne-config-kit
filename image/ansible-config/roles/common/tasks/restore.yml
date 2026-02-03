@@ -2,8 +2,8 @@
 - name: Validate backup transport
   ansible.builtin.assert:
     that:
-      - backup_transport in ['cli', 'netconf', 'httpapi']
-    fail_msg: "backup_transport must be one of: cli, netconf, httpapi"
+      - backup_transport in ['cli', 'netconf', 'httpapi', 'scp']
+    fail_msg: "backup_transport must be one of: cli, netconf, httpapi, scp"
 
 - name: Validate HTTP API restore settings
   ansible.builtin.assert:
@@ -12,6 +12,13 @@
       - httpapi_restore_path | length > 0
     fail_msg: "httpapi_base_url and httpapi_restore_path must be set for HTTP API restores"
   when: backup_transport == 'httpapi'
+
+- name: Validate SCP restore settings
+  ansible.builtin.assert:
+    that:
+      - (scp_restore_path | default('') | length > 0) or (scp_remote_path | default('') | length > 0)
+    fail_msg: "scp_restore_path or scp_remote_path must be set for SCP restores"
+  when: backup_transport == 'scp'
 
 - name: Check for desired config file
   ansible.builtin.stat:
@@ -49,29 +56,13 @@
   ansible.builtin.include_tasks: restore_netconf.yml
   when: backup_transport == 'netconf'
 
-- name: Ensure kind-specific HTTP API restore task is selected
-  ansible.builtin.assert:
-    that:
-      - clab_kind | default('') | length > 0
-    fail_msg: "clab_kind not resolved; set clab_kind_credentials key matching a group in inventory."
-  when: backup_transport == 'httpapi'
-
-- name: Check kind-specific HTTP API restore task
-  ansible.builtin.stat:
-    path: "{{ role_path }}/tasks/kinds/{{ clab_kind }}/restore_httpapi.yml"
-  register: httpapi_restore_task_stat
-  when: backup_transport == 'httpapi'
-
-- name: Ensure HTTP API restore task file exists
-  ansible.builtin.assert:
-    that:
-      - httpapi_restore_task_stat.stat.exists
-    fail_msg: "Missing HTTP API restore task for kind '{{ clab_kind }}' at tasks/kinds/{{ clab_kind }}/restore_httpapi.yml"
-  when: backup_transport == 'httpapi'
-
 - name: Apply config via HTTP API
-  ansible.builtin.include_tasks: "kinds/{{ clab_kind }}/restore_httpapi.yml"
+  ansible.builtin.include_tasks: restore_httpapi.yml
   when: backup_transport == 'httpapi'
+
+- name: Apply config via SCP
+  ansible.builtin.include_tasks: restore_scp.yml
+  when: backup_transport == 'scp'
 
 - name: Verify post-restore state via audit
   ansible.builtin.import_role:

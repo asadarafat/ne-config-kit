@@ -5,6 +5,10 @@
 /backups/**
 !/backups/.gitkeep
 
+# Test artifacts
+/tests/backups/**
+!/tests/backups/.gitkeep
+
 # Containerlab runtime output
 /example/clab-*/
 example/*.clab.yml.annotations.json

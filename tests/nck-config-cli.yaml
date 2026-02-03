@@ -1,0 +1,9 @@
+---
+clab_inventory: "/tests/inventory.yml"
+target_hosts: "testdevice"
+backup_root: "/backups/cli"
+backup_filename: "running.conf"
+
+backup_transport: cli
+backup_command: "show running-config"
+ansible_connection: local

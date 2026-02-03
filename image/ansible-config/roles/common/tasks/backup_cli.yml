@@ -3,6 +3,7 @@
   ansible.netcommon.cli_command:
     command: "{{ backup_command }}"
   register: cli_result
+  check_mode: false
 
 - name: Set raw config from CLI output
   ansible.builtin.set_fact:

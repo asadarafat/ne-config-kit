@@ -10,15 +10,17 @@ and network modules to interact with devices.
 - `restore.yml` pushes `backups/<hostname>/running.conf` to the device and
   verifies post-restore state using the audit workflow.
 - `audit.yml` compares live config to Git-stored config and fails on drift.
-- Kind-specific HTTP API tasks live under `tasks/kinds/<node_kind>/` and are
-  required for `httpapi` backups/restores.
+## Transport tasks
+- HTTP API: `backup_httpapi.yml` / `restore_httpapi.yml`
+- SCP: `backup_scp.yml` / `restore_scp.yml`
 
 ## Key variables (group_vars/routers/defaults.yml)
-- `backup_transport`: `cli`, `netconf`, or `httpapi`
+- `backup_transport`: `cli`, `netconf`, `httpapi`, or `scp`
 - `backup_command`: CLI command for running config (CLI transport)
 - `backup_root` / `backup_filename`: backup location and file name
 - `normalize_patterns`: regexes to strip volatile lines
 - `httpapi_*`: generic REST/RESTCONF settings for HTTP API transport
+- `scp_*`: SCP settings for file-based backup/restore
 
 ## Safety notes
 - No Git operations are performed by the role.

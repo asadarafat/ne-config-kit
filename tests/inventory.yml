@@ -1,0 +1,6 @@
+all:
+  children:
+    nokia_srlinux:
+      hosts:
+        testdevice:
+          ansible_host: 127.0.0.1

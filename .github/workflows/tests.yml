@@ -1,0 +1,30 @@
+name: Regression tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        run: docker build -t ne-config-kit:test .
+
+      - name: Run regression tests
+        run: |
+          mkdir -p tests/backups
+          docker run --rm --user 0 --entrypoint /bin/bash \
+            -v "$PWD/tests:/tests" \
+            -v "$PWD/tests/backups:/backups" \
+            ne-config-kit:test \
+            /tests/run.sh

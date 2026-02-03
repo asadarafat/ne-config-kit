@@ -21,7 +21,7 @@ restore <-------------------------------------- audit
 ```
 
 ## Execution model
-- Ansible connects to devices using `network_cli`, `netconf`, or `httpapi`.
+- Ansible connects to devices using `network_cli`, `netconf`, `httpapi`, or `scp`.
 - Backup and audit run read-only operations on devices.
 - Restore is an explicit, user-driven action and is always opt-in.
 - All files are text-based to remain diff-friendly in Git.

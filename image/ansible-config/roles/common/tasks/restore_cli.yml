@@ -2,6 +2,6 @@
 - name: Apply config via CLI
   ansible.netcommon.cli_config:
     config: "{{ desired_config }}"
-    replace: "{{ cli_config_replace }}"
-    diff_match: "{{ cli_diff_match }}"
-    save_when: "{{ cli_save_when }}"
+    replace: "{{ cli_config_replace | default('line') }}"
+    diff_match: "{{ cli_diff_match | default('line') }}"
+    save_when: "{{ cli_save_when | default('never') }}"
