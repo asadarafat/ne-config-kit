@@ -12,6 +12,8 @@
     body_format: "{{ httpapi_backup_body_format | default(httpapi_body_format, true) | default(omit, true) }}"
     status_code: "{{ httpapi_backup_expected_status | default(httpapi_expected_status, true) | default(omit, true) }}"
     return_content: true
+  check_mode: false
+  changed_when: false
   register: httpapi_result
   delegate_to: localhost
   vars:

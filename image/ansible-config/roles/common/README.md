@@ -10,6 +10,8 @@ and network modules to interact with devices.
 - `restore.yml` pushes `backups/<hostname>/running.conf` to the device and
   verifies post-restore state using the audit workflow.
 - `audit.yml` compares live config to Git-stored config and fails on drift.
+- Kind-specific HTTP API tasks live under `tasks/kinds/<node_kind>/` and are
+  required for `httpapi` backups/restores.
 
 ## Key variables (group_vars/routers/defaults.yml)
 - `backup_transport`: `cli`, `netconf`, or `httpapi`
