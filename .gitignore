@@ -16,3 +16,4 @@ example/*.clab.yml.annotations.json
 # Vault password files
 .vault_pass
 **/.vault_pass
+ref-plan.md
