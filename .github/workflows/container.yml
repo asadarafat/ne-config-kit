@@ -49,4 +49,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            ANSIBLE_GALAXY_COLLECTIONS=ansible.netcommon community.general
+            ANSIBLE_GALAXY_COLLECTIONS=ansible.netcommon nokia.sros
