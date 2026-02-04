@@ -2,11 +2,6 @@ name: Build and publish container
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
 
 permissions:
   contents: read
