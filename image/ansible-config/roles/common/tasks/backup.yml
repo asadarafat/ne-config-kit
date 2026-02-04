@@ -64,19 +64,26 @@
     normalized_config: "{{ normalized_config | regex_replace('\\n{3,}', '\\n\\n') }}"
   when: normalize_strip_empty | default(true)
 
+- name: Resolve backup template
+  ansible.builtin.set_fact:
+    _backup_template: "{{ backup_filename_template | default('') }}"
+
+- name: Resolve backup template flag
+  ansible.builtin.set_fact:
+    _backup_template_enabled: "{{ (_backup_template | trim | length) > 0 }}"
+
 - name: Resolve backup timestamp
   ansible.builtin.set_fact:
     backup_timestamp: "{{ backup_timestamp | default(lookup('pipe', 'date -u +%Y%m%d%H%M%S')) }}"
-  when: backup_filename_template | default('') | trim | length > 0
+  when: _backup_template_enabled
 
 - name: Resolve backup filename
   ansible.builtin.set_fact:
     backup_filename_effective: >-
       {{
-        (backup_filename_template | default('') | trim)
-        | length > 0
+        _backup_template_enabled
         | ternary(
-            (backup_filename_template
+            (_backup_template
               | replace('<clab_lab_name>', clab_lab_name | default('lab'))
               | replace('<ne_name>', inventory_hostname)
               | replace('<time-stamp>', backup_timestamp | default(''))),
