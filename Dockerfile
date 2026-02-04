@@ -1,7 +1,8 @@
 FROM python:3.12-slim
 
 ARG ANSIBLE_CORE_VERSION=2.16.6
-ARG ANSIBLE_GALAXY_COLLECTIONS=""
+# Default collections needed by the baked Ansible workspace.
+ARG ANSIBLE_GALAXY_COLLECTIONS="ansible.netcommon"
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
