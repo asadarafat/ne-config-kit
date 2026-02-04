@@ -1,0 +1,11 @@
+---
+# SR OS defaults for CLI-based backup/restore.
+backup_transport: cli
+backup_command:
+  - "environment more false"
+  - "admin show configuration running"
+cli_restore_method: line_by_line
+cli_restore_pre_commands:
+  - "configure private"
+cli_restore_post_commands:
+  - "commit"
