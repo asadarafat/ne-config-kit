@@ -16,6 +16,11 @@ backup_transport: cli            # cli | netconf | httpapi | scp
 backup_command: "show running-config"
 backup_root: "/backups"
 backup_filename: "running.conf"
+# Optional archive filename template. Supports tokens:
+# <clab_lab_name>, <ne_name>, <time-stamp>
+backup_filename_template: ""
+backup_timestamp: ""
+backup_write_latest: true
 
 # Normalization patterns remove volatile lines to reduce churn
 normalize_patterns:

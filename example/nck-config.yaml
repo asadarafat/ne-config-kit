@@ -1,4 +1,5 @@
 ---
+# yaml-language-server: $schema=../docs/nck-config.schema.json
 # Containerlab runtime inputs.
 # Use either clab_inventory or clab_lab_name to locate the generated inventory.
 clab_lab_name: "ne-config-kit-example"
@@ -11,13 +12,20 @@ target_hosts: "nokia_srlinux"
 
 # Global backup location (override per environment as needed).
 backup_root: "/backups"
+# Stable filename used by audit/restore.
 backup_filename: "running.conf"
+# Optional archive filename template. Supported tokens:
+# <clab_lab_name>, <ne_name>, <time-stamp>
+backup_filename_template: "<clab_lab_name>__<ne_name>__<time-stamp>.conf"
 
 # Credentials keyed by containerlab node kind.
 clab_kind_credentials:
   nokia_srlinux:
     username: admin
     password: NokiaSrl1!
+  nokia_srsim:
+    username: admin1
+    password: admin1
 
 # Optional host-specific overrides (take precedence over kind defaults).
 # clab_host_credentials:

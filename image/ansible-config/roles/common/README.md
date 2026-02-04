@@ -17,6 +17,8 @@ and network modules to interact with devices.
 ## Key variables (group_vars/routers/defaults.yml)
 - `backup_transport`: `cli`, `netconf`, `httpapi`, or `scp`
 - `backup_command`: CLI command for running config (CLI transport)
+- `cli_restore_method`: `cli_config` or `line_by_line` for CLI restores
+- `cli_restore_pre_commands` / `cli_restore_post_commands`: commands for line-by-line restores
 - `backup_root` / `backup_filename`: backup location and file name
 - `normalize_patterns`: regexes to strip volatile lines
 - `httpapi_*`: generic REST/RESTCONF settings for HTTP API transport

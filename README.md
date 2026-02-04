@@ -46,6 +46,13 @@ docker run --rm -t \
 ```
 Use `restore --check` or `audit` as needed.
 
+## Config schema and examples
+- Schema: `docs/nck-config.schema.json`
+- Examples:
+  - `docs/examples/nck-config.minimal.yaml`
+  - `docs/examples/nck-config.multi-lab.yaml`
+  - `docs/examples/nck-config.host-overrides.yaml`
+
 ## Tests
 Run the regression test suite:
 ```

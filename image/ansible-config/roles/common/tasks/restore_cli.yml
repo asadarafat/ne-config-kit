@@ -1,7 +1,42 @@
 ---
-- name: Apply config via CLI
+- name: Build CLI restore options
+  ansible.builtin.set_fact:
+    _cli_restore_method: "{{ cli_restore_method | default('cli_config') }}"
+    _cli_restore_pre: "{{ cli_restore_pre_commands | default([]) }}"
+    _cli_restore_post: "{{ cli_restore_post_commands | default([]) }}"
+    _cli_restore_lines: "{{ desired_config.splitlines() }}"
+
+- name: Apply config via CLI (cli_config)
   ansible.netcommon.cli_config:
     config: "{{ desired_config }}"
     replace: "{{ cli_config_replace | default('line') }}"
     diff_match: "{{ cli_diff_match | default('line') }}"
     save_when: "{{ cli_save_when | default('never') }}"
+  when: _cli_restore_method == 'cli_config'
+
+- name: Enter CLI config mode
+  ansible.netcommon.cli_command:
+    command: "{{ item }}"
+  loop: "{{ _cli_restore_pre }}"
+  when:
+    - _cli_restore_method == 'line_by_line'
+    - not ansible_check_mode
+    - _cli_restore_pre | length > 0
+
+- name: Apply config lines via CLI
+  ansible.netcommon.cli_command:
+    command: "{{ item }}"
+  loop: "{{ _cli_restore_lines }}"
+  when:
+    - _cli_restore_method == 'line_by_line'
+    - not ansible_check_mode
+    - item | trim | length > 0
+
+- name: Commit CLI config
+  ansible.netcommon.cli_command:
+    command: "{{ item }}"
+  loop: "{{ _cli_restore_post }}"
+  when:
+    - _cli_restore_method == 'line_by_line'
+    - not ansible_check_mode
+    - _cli_restore_post | length > 0

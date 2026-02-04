@@ -1,6 +1,11 @@
 ---
-# SR Linux simulator defaults for SCP-based backup/restore.
-backup_transport: scp
-
-# Path to the config file on the device. Override in nck-config.yaml if needed.
-scp_remote_path: ""
+# SR Linux simulator defaults for CLI-based backup/restore.
+backup_transport: cli
+backup_command:
+  - "environment more false"
+  - "admin show configuration running"
+cli_restore_method: line_by_line
+cli_restore_pre_commands:
+  - "configure private"
+cli_restore_post_commands:
+  - "commit"
