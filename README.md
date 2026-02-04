@@ -41,7 +41,7 @@ clab deploy -t example/clab-topo.clab.yml --reconfigure
 
 docker run --rm -t \
   -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/backups" \
+  -v "$PWD/backups:/nck-backups" \
   ghcr.io/<owner>/ne-config-kit:latest backup
 ```
 Use `restore --check` or `audit` as needed.
@@ -71,7 +71,7 @@ Example:
 ```
 docker run --rm -t \
   -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/backups" \
+  -v "$PWD/backups:/nck-backups" \
   ghcr.io/<owner>/ne-config-kit:latest backup
 ```
 Override the config path with `-e NCK_CONFIG=/clab/nck-config.yaml` or pass

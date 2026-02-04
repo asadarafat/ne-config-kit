@@ -7,7 +7,7 @@ target_hosts:
   - "lab-a:&nokia_srlinux"
   - "lab-b:&nokia_srsim"
 
-backup_root: "/backups"
+backup_root: "/nck-backups"
 backup_filename: "running.conf"
 
 clab_kind_credentials:

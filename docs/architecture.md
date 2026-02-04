@@ -14,7 +14,7 @@ of truth, and Ansible playbooks are the execution engine.
 4. **Restore (push):** Apply Git-stored config back to the device when needed.
 
 ```
-device -> backup -> backups/<host>/running.conf -> Git
+device -> backup -> <backup_root>/<host>/running.conf -> Git
    ^                                              |
    |                                              v
 restore <-------------------------------------- audit
@@ -28,8 +28,9 @@ restore <-------------------------------------- audit
 
 ## Separation of concerns
 - **Repo:** The baked Ansible workspace lives under `image/ansible-config`,
-  while runtime inputs live under `example/` and `backups/`.
+  while runtime inputs live under `example/` and a backups directory.
 - **Runtime:** Credentials and runtime state are provided at execution time
   (Vault, SSH keys, or `example/nck-config.yaml`).
 - **Container:** The image embeds the Ansible workspace only; inventories,
-  credentials, and backups are supplied at runtime via `/clab` and `/backups`.
+  credentials, and backups are supplied at runtime via `/clab` and
+  `/nck-backups` (by default).

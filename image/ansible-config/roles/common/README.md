@@ -6,8 +6,8 @@ and network modules to interact with devices.
 
 ## Tasks
 - `backup.yml` pulls the running configuration, normalizes volatile lines, and
-  writes `backups/<hostname>/running.conf` on the control node.
-- `restore.yml` pushes `backups/<hostname>/running.conf` to the device and
+  writes `<backup_root>/<hostname>/running.conf` on the control node.
+- `restore.yml` pushes `<backup_root>/<hostname>/running.conf` to the device and
   verifies post-restore state using the audit workflow.
 - `audit.yml` compares live config to Git-stored config and fails on drift.
 ## Transport tasks
@@ -19,6 +19,7 @@ and network modules to interact with devices.
 - `backup_command`: CLI command for running config (CLI transport)
 - `cli_restore_method`: `cli_config` or `line_by_line` for CLI restores
 - `cli_restore_pre_commands` / `cli_restore_post_commands`: commands for line-by-line restores
+- `ansible_ssh_common_args`: extra SSH args for CLI connections
 - `backup_root` / `backup_filename`: backup location and file name
 - `normalize_patterns`: regexes to strip volatile lines
 - `httpapi_*`: generic REST/RESTCONF settings for HTTP API transport

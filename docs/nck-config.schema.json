@@ -32,6 +32,11 @@
       "minLength": 1,
       "description": "Override the kind resolution when inventory groups do not match credentials."
     },
+    "ansible_ssh_common_args": {
+      "type": "string",
+      "default": "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+      "description": "Additional SSH arguments for network_cli connections."
+    },
     "backup_transport": {
       "type": "string",
       "enum": ["cli", "netconf", "httpapi", "scp"],
@@ -40,7 +45,7 @@
     "backup_root": {
       "type": "string",
       "minLength": 1,
-      "default": "/backups",
+      "default": "/nck-backups",
       "description": "Root directory for backups."
     },
     "backup_filename": {
@@ -51,6 +56,7 @@
     },
     "backup_filename_template": {
       "type": "string",
+      "default": "<clab_lab_name>__<ne_name>__<time-stamp>.conf",
       "description": "Optional archive filename template. Tokens: <clab_lab_name>, <ne_name>, <time-stamp>."
     },
     "backup_timestamp": {

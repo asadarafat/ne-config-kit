@@ -8,10 +8,12 @@
   are supported for CI/CD and ephemeral usage.
 - **SSH keys:** `ANSIBLE_NET_SSH_KEY` can be used for key-based authentication.
 - **Plaintext labs:** `example/nck-config.yaml` supports plaintext credentials for lab use.
+- **Host key checking:** Default SSH args disable strict host key checking for labs.
+  Override `ansible_ssh_common_args` for production safety.
 
 ## Backups are sensitive
 Device configurations often include passwords, SNMP communities, keys, and
-network topology details. Treat the `backups/` directory as sensitive data:
+network topology details. Treat the backup directory as sensitive data:
 - Restrict access to the repo and CI logs.
 - Use encrypted disks or a private Git host.
 - Rotate credentials if exposure is suspected.

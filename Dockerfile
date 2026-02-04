@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 ARG ANSIBLE_CORE_VERSION=2.16.6
 # Default collections needed by the baked Ansible workspace.
-ARG ANSIBLE_GALAXY_COLLECTIONS="ansible.netcommon nokia.sros"
+ARG ANSIBLE_GALAXY_COLLECTIONS="ansible.netcommon nokia.sros cisco.iosxr"
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \

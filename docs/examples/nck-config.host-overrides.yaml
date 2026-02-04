@@ -3,7 +3,7 @@
 clab_lab_name: "ne-config-kit-example"
 
 target_hosts: "all"
-backup_root: "/backups"
+backup_root: "/nck-backups"
 backup_filename: "running.conf"
 
 clab_kind_credentials:

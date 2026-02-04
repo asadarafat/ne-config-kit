@@ -10,15 +10,16 @@ ansible_password: >-
      | default(omit, true) }}
 ansible_ssh_private_key_file: "{{ lookup('env', 'ANSIBLE_NET_SSH_KEY') | default(omit, true) }}"
 ansible_become: false
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 # Backup and restore defaults
 backup_transport: cli            # cli | netconf | httpapi | scp
 backup_command: "show running-config"
-backup_root: "/backups"
+backup_root: "/nck-backups"
 backup_filename: "running.conf"
 # Optional archive filename template. Supports tokens:
 # <clab_lab_name>, <ne_name>, <time-stamp>
-backup_filename_template: ""
+backup_filename_template: "<clab_lab_name>__<ne_name>__<time-stamp>.conf"
 backup_timestamp: ""
 backup_write_latest: true
 

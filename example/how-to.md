@@ -19,19 +19,19 @@ Notes:
 ```
 docker run --rm -t \
   -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/backups" \
+  -v "$PWD/backups:/nck-backups" \
   ghcr.io/asadarafat/ne-config-kit:latest backup
 ```
 
 Results:
-- `backups/<host>/running.conf` (stable)
-- `backups/<host>/<clab_lab_name>__<ne_name>__<time-stamp>.conf` (archive)
+- `nck-backups/<host>/running.conf` (stable)
+- `nck-backups/<host>/<clab_lab_name>__<ne_name>__<time-stamp>.conf` (archive)
 
 ## 4) Dry-run restore
 ```
 docker run --rm -t \
   -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/backups" \
+  -v "$PWD/backups:/nck-backups" \
   ghcr.io/asadarafat/ne-config-kit:latest restore --check
 ```
 
@@ -39,7 +39,7 @@ docker run --rm -t \
 ```
 docker run --rm -t \
   -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/backups" \
+  -v "$PWD/backups:/nck-backups" \
   ghcr.io/asadarafat/ne-config-kit:latest restore
 ```
 
