@@ -1,0 +1,25 @@
+---
+- name: Load kind defaults from baked workspace
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/{{ clab_kind }}.yml"
+    name: clab_kind_defaults
+  when: clab_kind is defined and (clab_kind | string | length > 0)
+  ignore_errors: true
+
+- name: Apply kind defaults for missing settings
+  ansible.builtin.set_fact:
+    "{{ item.key }}": "{{ vars[item.key] | default(item.value) }}"
+  loop: "{{ (clab_kind_defaults | default({})) | dict2items }}"
+  when: clab_kind_defaults is defined
+
+- name: Load global defaults from baked workspace
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../group_vars/routers/defaults.yml"
+    name: clab_router_defaults
+  ignore_errors: true
+
+- name: Apply global defaults for missing settings
+  ansible.builtin.set_fact:
+    "{{ item.key }}": "{{ vars[item.key] | default(item.value) }}"
+  loop: "{{ (clab_router_defaults | default({})) | dict2items }}"
+  when: clab_router_defaults is defined

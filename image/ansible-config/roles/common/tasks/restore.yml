@@ -1,4 +1,7 @@
 ---
+- name: Apply kind defaults
+  ansible.builtin.import_tasks: load_kind_defaults.yml
+
 - name: Validate backup transport
   ansible.builtin.assert:
     that:
