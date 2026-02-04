@@ -16,4 +16,5 @@ example/*.clab.yml.annotations.json
 # Vault password files
 .vault_pass
 **/.vault_pass
+image/ansible-config/group_vars/routers/vault.yml
 ref-plan.md

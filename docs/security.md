@@ -1,7 +1,9 @@
 # Security model
 
 ## Credential handling
-- **Ansible Vault:** Use `image/ansible-config/group_vars/routers/vault.yml` for encrypted secrets.
+- **Ansible Vault:** Copy `image/ansible-config/group_vars/routers/vault.example.yml` to
+  `image/ansible-config/group_vars/routers/vault.yml`, encrypt it with `ansible-vault`,
+  and mount/provide it at runtime.
 - **Environment variables:** `ANSIBLE_NET_USERNAME` and `ANSIBLE_NET_PASSWORD`
   are supported for CI/CD and ephemeral usage.
 - **SSH keys:** `ANSIBLE_NET_SSH_KEY` can be used for key-based authentication.

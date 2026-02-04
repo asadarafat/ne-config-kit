@@ -1,0 +1,10 @@
+---
+# Example only. Copy to vault.yml and encrypt with ansible-vault before use.
+# Example: ansible-vault encrypt image/ansible-config/group_vars/routers/vault.yml
+
+vault_ansible_user: admin
+vault_ansible_password: CHANGEME
+
+# Optional: explicit HTTP API credentials (if different from ansible_user/pass)
+httpapi_username: admin
+httpapi_password: CHANGEME

@@ -79,7 +79,8 @@ extra Ansible flags after the command (for example `restore --check`).
 
 ## Security model
 - Credentials can be supplied via `nck-config.yaml` (plaintext for labs) or
-  Ansible Vault (`image/ansible-config/group_vars/routers/vault.yml`) for encrypted secrets.
+  Ansible Vault (copy `image/ansible-config/group_vars/routers/vault.example.yml`
+  to `vault.yml`, encrypt it, and mount/provide it at runtime).
 - Environment variables are supported for CI/CD.
 - Backups are sensitive data; restrict repo access.
 

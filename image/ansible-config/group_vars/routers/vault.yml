@@ -1,6 +1,0 @@
----
-# Plaintext lab credentials (temporary). Replace with Ansible Vault when ready.
-vault_ansible_user: admin
-vault_ansible_password: NokiaSrl1!
-httpapi_username: admin
-httpapi_password: NokiaSrl1!
