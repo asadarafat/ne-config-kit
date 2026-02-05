@@ -27,7 +27,6 @@
   when: clab_kind is not defined or (clab_kind | string | length == 0)
 
 - name: Load kind defaults from baked workspace
-- name: Load kind defaults from baked workspace
   ansible.builtin.include_vars:
     file: "{{ playbook_dir }}/../group_vars/{{ clab_kind }}.yml"
     name: clab_kind_defaults
