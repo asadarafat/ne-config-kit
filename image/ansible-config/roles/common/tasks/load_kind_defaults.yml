@@ -33,6 +33,22 @@
   when: clab_kind is defined and (clab_kind | string | length > 0)
   ignore_errors: true
 
+- name: Apply kind connection defaults early (network os)
+  ansible.builtin.set_fact:
+    ansible_network_os: "{{ clab_kind_defaults.ansible_network_os }}"
+  when:
+    - clab_kind_defaults is defined
+    - clab_kind_defaults.ansible_network_os is defined
+    - ansible_network_os is not defined
+
+- name: Apply kind connection defaults early (connection)
+  ansible.builtin.set_fact:
+    ansible_connection: "{{ clab_kind_defaults.ansible_connection }}"
+  when:
+    - clab_kind_defaults is defined
+    - clab_kind_defaults.ansible_connection is defined
+    - ansible_connection is not defined
+
 - name: Apply kind defaults for missing settings
   ansible.builtin.set_fact:
     "{{ item.key }}": "{{ item.value }}"
@@ -40,6 +56,7 @@
   when:
     - clab_kind_defaults is defined
     - vars[item.key] is not defined
+    - item.key not in ['ansible_connection', 'ansible_network_os']
     - item.value is not string or (item.value | regex_search('^__omit_place_holder__')) is none
     - (item.key | regex_search('^audit_')) is none
     - item.key != 'restore_verify'
