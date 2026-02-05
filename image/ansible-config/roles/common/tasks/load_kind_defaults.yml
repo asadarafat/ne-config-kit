@@ -14,7 +14,7 @@
     - clab_kind_defaults is defined
     - vars[item.key] is not defined
     - item.value is not string or (item.value | regex_search('^__omit_place_holder__')) is none
-    - (item.key | regex_search('^audit_') | default('')) == ''
+    - (item.key | regex_search('^audit_')) is none
     - item.key != 'restore_verify'
 
 - name: Load global defaults from baked workspace
@@ -31,5 +31,5 @@
     - clab_router_defaults is defined
     - vars[item.key] is not defined
     - item.value is not string or (item.value | regex_search('^__omit_place_holder__')) is none
-    - (item.key | regex_search('^audit_') | default('')) == ''
+    - (item.key | regex_search('^audit_')) is none
     - item.key != 'restore_verify'
