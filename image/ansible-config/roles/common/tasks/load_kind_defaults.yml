@@ -47,7 +47,7 @@
   when:
     - clab_kind_defaults is defined
     - clab_kind_defaults.ansible_connection is defined
-    - ansible_connection is not defined
+    - ansible_connection is not defined or ansible_connection in ['ssh', 'paramiko', 'smart']
 
 - name: Apply kind defaults for missing settings
   ansible.builtin.set_fact:
