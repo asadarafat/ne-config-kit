@@ -1,0 +1,6 @@
+set / system name test-device
+set / system dns server 8.8.8.8
+
+set / system name test-device
+set / system dns server 8.8.8.8
+

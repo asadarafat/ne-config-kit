@@ -8,9 +8,14 @@
 
 - name: Apply kind defaults for missing settings
   ansible.builtin.set_fact:
-    "{{ item.key }}": "{{ vars[item.key] | default(item.value) }}"
+    "{{ item.key }}": "{{ item.value }}"
   loop: "{{ (clab_kind_defaults | default({})) | dict2items }}"
-  when: clab_kind_defaults is defined
+  when:
+    - clab_kind_defaults is defined
+    - vars[item.key] is not defined
+    - item.value is not string or (item.value | regex_search('^__omit_place_holder__') | default('')) == ''
+    - (item.key | regex_search('^audit_') | default('')) == ''
+    - item.key != 'restore_verify'
 
 - name: Load global defaults from baked workspace
   ansible.builtin.include_vars:
@@ -20,6 +25,11 @@
 
 - name: Apply global defaults for missing settings
   ansible.builtin.set_fact:
-    "{{ item.key }}": "{{ vars[item.key] | default(item.value) }}"
+    "{{ item.key }}": "{{ item.value }}"
   loop: "{{ (clab_router_defaults | default({})) | dict2items }}"
-  when: clab_router_defaults is defined
+  when:
+    - clab_router_defaults is defined
+    - vars[item.key] is not defined
+    - item.value is not string or (item.value | regex_search('^__omit_place_holder__') | default('')) == ''
+    - (item.key | regex_search('^audit_') | default('')) == ''
+    - item.key != 'restore_verify'

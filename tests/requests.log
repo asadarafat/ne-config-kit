@@ -1,0 +1,5 @@
+{"jsonrpc": "2.0", "id": 1, "method": "cli", "params": {"commands": ["show running-config"]}}
+{"jsonrpc": "2.0", "id": 1, "method": "cli", "params": {"commands": ["show running-config"]}}
+{"jsonrpc": "2.0", "id": 1, "method": "cli", "params": {"commands": ["show running-config"]}}
+{"jsonrpc": "2.0", "id": 1, "method": "cli", "params": {"commands": ["configure terminal", "commit"]}}
+{"jsonrpc": "2.0", "id": 1, "method": "cli", "params": {"commands": ["show running-config"]}}
