@@ -49,8 +49,9 @@ type Creds struct {
 var errUnsupportedKind = errors.New("unsupported kind")
 
 const (
-	retryAttempts = 3
-	retryDelay    = 2 * time.Second
+	retryAttempts  = 3
+	retryDelay     = 2 * time.Second
+	defaultOpTimeout = 5 * time.Minute
 )
 
 type Inventory struct {
@@ -435,6 +436,7 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithAuthPassword(creds.Pass),
 		driveroptions.WithAuthNoStrictKey(),
 		driveroptions.WithTransportType(transport.StandardTransport),
+		driveroptions.WithTimeoutOps(defaultOpTimeout),
 	)
 	if err != nil {
 		return nil, err
@@ -614,6 +616,9 @@ func restoreSros(node NodeInfo, outDir, platformName string, creds Creds) error 
 	}
 	defer conn.Close()
 
+	if _, err := conn.SendCommand("environment more false"); err != nil {
+		return err
+	}
 	if _, err := conn.SendCommand("configure exclusive"); err != nil {
 		return err
 	}
