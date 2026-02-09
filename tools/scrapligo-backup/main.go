@@ -463,10 +463,22 @@ func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
 	}
 	defer conn.Close()
 
-	localPath := filepath.Join(outDir, node.Name+".txt")
 	if _, err := conn.SendCommand("environment more false"); err != nil {
 		return err
 	}
+	// Save to cf3 so SFTP can fetch from its root.
+	saveCmd := fmt.Sprintf("admin save cf3:/%s.txt", node.Name)
+	if _, err := conn.SendCommand(saveCmd); err != nil {
+		return err
+	}
+	time.Sleep(1 * time.Second)
+
+	localPath := filepath.Join(outDir, node.Name+".txt")
+	if err := srosDownload(node.Host, creds, node.Name+".txt", localPath); err == nil {
+		return nil
+	}
+
+	// Fallback to streaming output if SFTP fails.
 	resp, err := conn.SendCommand("admin show configuration running")
 	if err != nil {
 		return err
@@ -683,11 +695,11 @@ func sftpUpload(host string, creds Creds, localPath, remotePath string) error {
 
 func srosDownload(host string, creds Creds, filename, localPath string) error {
 	paths := []string{
+		filename,
+		"/" + filename,
 		"cf3:/" + filename,
 		"cf3:" + filename,
 		"/cf3/" + filename,
-		"/" + filename,
-		filename,
 	}
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
@@ -705,11 +717,11 @@ func srosDownload(host string, creds Creds, filename, localPath string) error {
 
 func srosUpload(host string, creds Creds, localPath, filename string) error {
 	paths := []string{
+		filename,
+		"/" + filename,
 		"cf3:/" + filename,
 		"cf3:" + filename,
 		"/cf3/" + filename,
-		"/" + filename,
-		filename,
 	}
 	var lastErr error
 	for _, remote := range paths {
