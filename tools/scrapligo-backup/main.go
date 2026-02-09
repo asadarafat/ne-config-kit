@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,8 +17,10 @@ import (
 	"github.com/scrapli/scrapligo/channel"
 	"github.com/scrapli/scrapligo/driver/network"
 	driveroptions "github.com/scrapli/scrapligo/driver/options"
+	scraplilogging "github.com/scrapli/scrapligo/logging"
 	"github.com/scrapli/scrapligo/platform"
 	"github.com/scrapli/scrapligo/transport"
+	"github.com/scrapli/scrapligo/util"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v3"
@@ -55,6 +58,7 @@ const (
 )
 
 var opTimeout = defaultOpTimeout
+var scrapliLogger *scraplilogging.Instance
 
 type Inventory struct {
 	All InventoryGroup `yaml:"all"`
@@ -77,10 +81,23 @@ func main() {
 	restore := flag.Bool("restore", false, "Run restore")
 	skipHealth := flag.Bool("skip-health", false, "Skip docker health check")
 	timeout := flag.Duration("timeout", defaultOpTimeout, "Scrapli operation timeout (e.g. 30s, 2m)")
+	debug := flag.Bool("debug", false, "Enable debug logging (includes scrapli debug output)")
 	only := flag.String("only", "", "Comma-separated node names to target (e.g. R01-nokia,R04-nokia)")
 	flag.Parse()
 
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+	if *debug {
+		logrus.SetLevel(logrus.DebugLevel)
+		l, err := scraplilogging.NewInstance(
+			scraplilogging.WithLevel("debug"),
+			scraplilogging.WithLogger(log.Print),
+		)
+		if err != nil {
+			logrus.Warnf("failed to enable scrapli debug logger: %v", err)
+		} else {
+			scrapliLogger = l
+		}
+	}
 	opTimeout = *timeout
 
 	if (*backup && *restore) || (!*backup && !*restore) {
@@ -466,15 +483,17 @@ func restoreNode(node NodeInfo, outDir string, creds map[string]Creds) error {
 }
 
 func connect(platformName, host string, creds Creds) (*network.Driver, error) {
-	p, err := platform.NewPlatform(
-		platformName,
-		host,
+	options := []util.Option{
 		driveroptions.WithAuthUsername(creds.User),
 		driveroptions.WithAuthPassword(creds.Pass),
 		driveroptions.WithAuthNoStrictKey(),
 		driveroptions.WithTransportType(transport.StandardTransport),
 		driveroptions.WithTimeoutOps(opTimeout),
-	)
+	}
+	if scrapliLogger != nil {
+		options = append(options, driveroptions.WithLogger(scrapliLogger))
+	}
+	p, err := platform.NewPlatform(platformName, host, options...)
 	if err != nil {
 		return nil, err
 	}
