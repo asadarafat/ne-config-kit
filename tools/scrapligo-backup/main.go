@@ -445,14 +445,14 @@ func backupJuniper(node NodeInfo, outDir, platformName string, creds Creds) erro
 	}
 	defer conn.Close()
 
-	remotePath := fmt.Sprintf("/var/home/%s/%s.txt", creds.User, node.Name)
-	cmd := fmt.Sprintf("show configuration | save %s", remotePath)
-	if _, err := conn.SendCommand(cmd); err != nil {
+	localPath := filepath.Join(outDir, node.Name+".txt")
+	_, _ = conn.SendCommand("set cli screen-length 0")
+	_, _ = conn.SendCommand("set cli screen-width 0")
+	resp, err := conn.SendCommand("show configuration | display set")
+	if err != nil {
 		return err
 	}
-
-	localPath := filepath.Join(outDir, node.Name+".txt")
-	return sftpDownload(node.Host, creds, remotePath, localPath)
+	return os.WriteFile(localPath, []byte(resp.Result), 0o644)
 }
 
 func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
@@ -463,17 +463,15 @@ func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
 	}
 	defer conn.Close()
 
+	localPath := filepath.Join(outDir, node.Name+".txt")
 	if _, err := conn.SendCommand("environment more false"); err != nil {
 		return err
 	}
-	// Save explicitly to cf3 so the file exists for SFTP download.
-	cmd := fmt.Sprintf("admin save cf3:/%s.txt", node.Name)
-	if _, err := conn.SendCommand(cmd); err != nil {
+	resp, err := conn.SendCommand("admin show configuration running")
+	if err != nil {
 		return err
 	}
-
-	localPath := filepath.Join(outDir, node.Name+".txt")
-	return srosDownload(node.Host, creds, node.Name+".txt", localPath)
+	return os.WriteFile(localPath, []byte(resp.Result), 0o644)
 }
 
 func backupSrl(node NodeInfo, outDir, platformName string, creds Creds) error {
