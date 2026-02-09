@@ -18,6 +18,7 @@ import (
 	driveroptions "github.com/scrapli/scrapligo/driver/options"
 	"github.com/scrapli/scrapligo/platform"
 	"github.com/scrapli/scrapligo/transport"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v3"
 )
@@ -47,6 +48,11 @@ type Creds struct {
 
 var errUnsupportedKind = errors.New("unsupported kind")
 
+const (
+	retryAttempts = 3
+	retryDelay    = 2 * time.Second
+)
+
 type Inventory struct {
 	All InventoryGroup `yaml:"all"`
 }
@@ -68,6 +74,8 @@ func main() {
 	restore := flag.Bool("restore", false, "Run restore")
 	skipHealth := flag.Bool("skip-health", false, "Skip docker health check")
 	flag.Parse()
+
+	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
 	if (*backup && *restore) || (!*backup && !*restore) {
 		exitWithUsage(errors.New("select exactly one of --backup or --restore"))
@@ -129,7 +137,10 @@ func main() {
 	if *backup {
 		printf("Starting backup...")
 		for _, node := range nodes {
-			if err := backupNode(node, *outDir, creds); err != nil {
+			err := retry(fmt.Sprintf("backup %s", node.Name), func() error {
+				return backupNode(node, *outDir, creds)
+			})
+			if err != nil {
 				if errors.Is(err, errUnsupportedKind) {
 					printf("Skipping %s (%s): %v", node.Name, node.Host, err)
 					continue
@@ -145,7 +156,10 @@ func main() {
 
 	printf("Starting restore...")
 	for _, node := range nodes {
-		if err := restoreNode(node, *outDir, creds); err != nil {
+		err := retry(fmt.Sprintf("restore %s", node.Name), func() error {
+			return restoreNode(node, *outDir, creds)
+		})
+		if err != nil {
 			if errors.Is(err, errUnsupportedKind) {
 				printf("Skipping %s (%s): %v", node.Name, node.Host, err)
 				continue
@@ -160,21 +174,20 @@ func main() {
 
 func exitWithUsage(err error) {
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logrus.Error(err)
 	}
-	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  --backup  Run backups")
-	fmt.Fprintln(os.Stderr, "  --restore Run restores")
+	logrus.Info("Usage:")
+	logrus.Info("  --backup  Run backups")
+	logrus.Info("  --restore Run restores")
 	os.Exit(2)
 }
 
 func fatalf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-	os.Exit(1)
+	logrus.Fatalf(format, args...)
 }
 
 func printf(format string, args ...any) {
-	fmt.Printf(format+"\n", args...)
+	logrus.Infof(format, args...)
 }
 
 func getEnv(key, def string) string {
@@ -238,6 +251,22 @@ func nodesFromLab(lab Lab, inventoryHosts map[string]string) ([]NodeInfo, error)
 		return nodes[i].Name < nodes[j].Name
 	})
 	return nodes, nil
+}
+
+func retry(action string, fn func() error) error {
+	var lastErr error
+	for attempt := 1; attempt <= retryAttempts; attempt++ {
+		err := fn()
+		if err == nil || errors.Is(err, errUnsupportedKind) {
+			return err
+		}
+		lastErr = err
+		if attempt < retryAttempts {
+			logrus.Warnf("%s attempt %d/%d failed: %v; retrying in %s", action, attempt, retryAttempts, err, retryDelay)
+			time.Sleep(retryDelay)
+		}
+	}
+	return lastErr
 }
 
 func normalizeIP(ip string) string {
