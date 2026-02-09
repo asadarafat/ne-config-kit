@@ -466,7 +466,8 @@ func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
 	if _, err := conn.SendCommand("environment more false"); err != nil {
 		return err
 	}
-	cmd := fmt.Sprintf("admin save %s.txt", node.Name)
+	// Save explicitly to cf3 so the file exists for SFTP download.
+	cmd := fmt.Sprintf("admin save cf3:/%s.txt", node.Name)
 	if _, err := conn.SendCommand(cmd); err != nil {
 		return err
 	}
