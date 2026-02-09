@@ -77,6 +77,7 @@ func main() {
 	restore := flag.Bool("restore", false, "Run restore")
 	skipHealth := flag.Bool("skip-health", false, "Skip docker health check")
 	timeout := flag.Duration("timeout", defaultOpTimeout, "Scrapli operation timeout (e.g. 30s, 2m)")
+	only := flag.String("only", "", "Comma-separated node names to target (e.g. R01-nokia,R04-nokia)")
 	flag.Parse()
 
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
@@ -104,6 +105,12 @@ func main() {
 	nodes, err := nodesFromLab(lab, inventoryHosts)
 	if err != nil {
 		fatalf("failed to parse nodes: %v", err)
+	}
+	if *only != "" {
+		nodes, err = filterNodes(nodes, *only)
+		if err != nil {
+			fatalf("failed to apply --only filter: %v", err)
+		}
 	}
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
@@ -256,6 +263,32 @@ func nodesFromLab(lab Lab, inventoryHosts map[string]string) ([]NodeInfo, error)
 		return nodes[i].Name < nodes[j].Name
 	})
 	return nodes, nil
+}
+
+func filterNodes(nodes []NodeInfo, only string) ([]NodeInfo, error) {
+	raw := strings.Split(only, ",")
+	allowed := make(map[string]struct{}, len(raw))
+	for _, entry := range raw {
+		name := strings.TrimSpace(entry)
+		if name == "" {
+			continue
+		}
+		allowed[name] = struct{}{}
+	}
+	if len(allowed) == 0 {
+		return nil, errors.New("no valid node names provided")
+	}
+
+	filtered := make([]NodeInfo, 0, len(nodes))
+	for _, node := range nodes {
+		if _, ok := allowed[node.Name]; ok {
+			filtered = append(filtered, node)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("no nodes matched --only=%q", only)
+	}
+	return filtered, nil
 }
 
 func retry(action string, fn func() error) error {
