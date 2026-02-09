@@ -49,10 +49,12 @@ type Creds struct {
 var errUnsupportedKind = errors.New("unsupported kind")
 
 const (
-	retryAttempts  = 3
-	retryDelay     = 2 * time.Second
+	retryAttempts   = 3
+	retryDelay      = 2 * time.Second
 	defaultOpTimeout = 5 * time.Minute
 )
+
+var opTimeout = defaultOpTimeout
 
 type Inventory struct {
 	All InventoryGroup `yaml:"all"`
@@ -74,9 +76,11 @@ func main() {
 	backup := flag.Bool("backup", false, "Run backup")
 	restore := flag.Bool("restore", false, "Run restore")
 	skipHealth := flag.Bool("skip-health", false, "Skip docker health check")
+	timeout := flag.Duration("timeout", defaultOpTimeout, "Scrapli operation timeout (e.g. 30s, 2m)")
 	flag.Parse()
 
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+	opTimeout = *timeout
 
 	if (*backup && *restore) || (!*backup && !*restore) {
 		exitWithUsage(errors.New("select exactly one of --backup or --restore"))
@@ -436,7 +440,7 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithAuthPassword(creds.Pass),
 		driveroptions.WithAuthNoStrictKey(),
 		driveroptions.WithTransportType(transport.StandardTransport),
-		driveroptions.WithTimeoutOps(defaultOpTimeout),
+		driveroptions.WithTimeoutOps(opTimeout),
 	)
 	if err != nil {
 		return nil, err
