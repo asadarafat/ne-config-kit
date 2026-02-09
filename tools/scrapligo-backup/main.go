@@ -44,9 +44,23 @@ type Creds struct {
 	Pass string
 }
 
+type Inventory struct {
+	All InventoryGroup `yaml:"all"`
+}
+
+type InventoryGroup struct {
+	Hosts    map[string]InventoryHost  `yaml:"hosts"`
+	Children map[string]InventoryGroup `yaml:"children"`
+}
+
+type InventoryHost struct {
+	AnsibleHost string `yaml:"ansible_host"`
+}
+
 func main() {
 	labPath := flag.String("lab", "lab.yml", "Containerlab topology file")
 	outDir := flag.String("out", "mv-lab-config", "Output directory for configs")
+	inventoryPath := flag.String("inventory", "", "Optional path to containerlab ansible-inventory.yml")
 	backup := flag.Bool("backup", false, "Run backup")
 	restore := flag.Bool("restore", false, "Run restore")
 	skipHealth := flag.Bool("skip-health", false, "Skip docker health check")
@@ -61,7 +75,17 @@ func main() {
 		fatalf("failed to read lab file: %v", err)
 	}
 
-	nodes, err := nodesFromLab(lab)
+	inventoryHosts := map[string]string(nil)
+	if invPath := resolveInventoryPath(*inventoryPath, *labPath, lab.Name); invPath != "" {
+		hosts, err := readInventoryHosts(invPath)
+		if err != nil {
+			printf("Inventory warning: failed to read %s: %v", invPath, err)
+		} else {
+			inventoryHosts = hosts
+		}
+	}
+
+	nodes, err := nodesFromLab(lab, inventoryHosts)
 	if err != nil {
 		fatalf("failed to parse nodes: %v", err)
 	}
@@ -161,21 +185,42 @@ func readLab(path string) (Lab, error) {
 	return lab, nil
 }
 
-func nodesFromLab(lab Lab) ([]NodeInfo, error) {
+func nodesFromLab(lab Lab, inventoryHosts map[string]string) ([]NodeInfo, error) {
 	if len(lab.Topology.Nodes) == 0 {
 		return nil, errors.New("no nodes found in topology")
 	}
 
 	nodes := make([]NodeInfo, 0, len(lab.Topology.Nodes))
 	for name, node := range lab.Topology.Nodes {
-		if node.Kind == "" || node.MgmtIPv4 == "" {
+		if node.Kind == "" {
+			printf("Skipping node %s: missing kind", name)
+			continue
+		}
+		kind := normalizeKind(node.Kind)
+		host := normalizeIP(node.MgmtIPv4)
+		if host == "" && len(inventoryHosts) > 0 {
+			if invHost, ok := inventoryHosts[name]; ok {
+				host = normalizeIP(invHost)
+			} else if lab.Name != "" {
+				clabName := fmt.Sprintf("clab-%s-%s", lab.Name, name)
+				if invHost, ok := inventoryHosts[clabName]; ok {
+					host = normalizeIP(invHost)
+				}
+			}
+		}
+		if host == "" {
+			printf("Skipping node %s: missing mgmt-ipv4/ansible_host", name)
 			continue
 		}
 		nodes = append(nodes, NodeInfo{
 			Name: name,
-			Kind: node.Kind,
-			Host: normalizeIP(node.MgmtIPv4),
+			Kind: kind,
+			Host: host,
 		})
+	}
+
+	if len(nodes) == 0 {
+		return nil, errors.New("no nodes with management address found")
 	}
 
 	sort.Slice(nodes, func(i, j int) bool {
@@ -189,6 +234,66 @@ func normalizeIP(ip string) string {
 		return ip[:idx]
 	}
 	return ip
+}
+
+func normalizeKind(kind string) string {
+	switch kind {
+	case "cisco_xrv9k":
+		return "vr-xrv9k"
+	case "juniper_vmx":
+		return "vr-vmx"
+	case "nokia_sros":
+		return "vr-sros"
+	case "nokia_srlinux":
+		return "srl"
+	default:
+		return kind
+	}
+}
+
+func resolveInventoryPath(flagValue, labPath, labName string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if labName == "" {
+		return ""
+	}
+	dir := filepath.Dir(labPath)
+	candidate := filepath.Join(dir, fmt.Sprintf("clab-%s", labName), "ansible-inventory.yml")
+	if fileExists(candidate) {
+		return candidate
+	}
+	return ""
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func readInventoryHosts(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var inv Inventory
+	if err := yaml.Unmarshal(data, &inv); err != nil {
+		return nil, err
+	}
+	hosts := make(map[string]string)
+	flattenHosts(inv.All, hosts)
+	return hosts, nil
+}
+
+func flattenHosts(group InventoryGroup, hosts map[string]string) {
+	for name, host := range group.Hosts {
+		if host.AnsibleHost != "" {
+			hosts[name] = host.AnsibleHost
+		}
+	}
+	for _, child := range group.Children {
+		flattenHosts(child, hosts)
+	}
 }
 
 func allNodesHealthy(labName string, nodes []NodeInfo) (bool, error) {
