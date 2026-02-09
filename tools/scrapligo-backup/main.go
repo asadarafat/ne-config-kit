@@ -17,6 +17,7 @@ import (
 	"github.com/scrapli/scrapligo/driver/network"
 	driveroptions "github.com/scrapli/scrapligo/driver/options"
 	"github.com/scrapli/scrapligo/platform"
+	"github.com/scrapli/scrapligo/transport"
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v3"
 )
@@ -394,6 +395,7 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithAuthUsername(creds.User),
 		driveroptions.WithAuthPassword(creds.Pass),
 		driveroptions.WithAuthNoStrictKey(),
+		driveroptions.WithTransportType(transport.StandardTransport),
 	)
 	if err != nil {
 		return nil, err
