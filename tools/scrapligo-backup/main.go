@@ -688,14 +688,19 @@ func srosDownload(host string, creds Creds, filename, localPath string) error {
 		"cf3:/" + filename,
 		"cf3:" + filename,
 		"/cf3/" + filename,
+		"/" + filename,
+		filename,
 	}
 	var lastErr error
-	for _, remote := range paths {
-		err := sftpDownload(host, creds, remote, localPath)
-		if err == nil {
-			return nil
+	for attempt := 0; attempt < 3; attempt++ {
+		for _, remote := range paths {
+			err := sftpDownload(host, creds, remote, localPath)
+			if err == nil {
+				return nil
+			}
+			lastErr = err
 		}
-		lastErr = err
+		time.Sleep(1 * time.Second)
 	}
 	return fmt.Errorf("sros download failed: %w", lastErr)
 }
@@ -705,6 +710,8 @@ func srosUpload(host string, creds Creds, localPath, filename string) error {
 		"cf3:/" + filename,
 		"cf3:" + filename,
 		"/cf3/" + filename,
+		"/" + filename,
+		filename,
 	}
 	var lastErr error
 	for _, remote := range paths {
