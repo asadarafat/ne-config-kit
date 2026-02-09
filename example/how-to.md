@@ -1,6 +1,6 @@
 # Backup + restore how-to (example)
 
-This walks through running NCK as a standalone container against the example
+This walks through running the Scrapligo tool against the example
 containerlab topology.
 
 ## 1) Deploy the lab
@@ -8,50 +8,35 @@ containerlab topology.
 clab deploy -t example/clab-topo.clab.yml --reconfigure
 ```
 
-## 2) Update the config
-Edit `example/nck-config.yaml` for your lab name, targets, and credentials.
-
-Notes:
-- `backup_filename_template` writes timestamped archives.
-- `backup_filename` is the stable file used by audit/restore.
-
-## 3) Run a backup
+## 2) Run a backup (container)
 ```
 docker run --rm -t \
   -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/nck-backups" \
-  ghcr.io/asadarafat/ne-config-kit:latest backup
+  -v "$PWD/backups:/backups" \
+  ne-config-kit:local \
+  --backup --lab /clab/clab-topo.clab.yml --out /backups
 ```
 
 Results:
-- `nck-backups/<host>/running.conf` (stable)
-- `nck-backups/<host>/<clab_lab_name>__<ne_name>__<time-stamp>.conf` (archive)
+- `backups/<node>.txt` for XR/vMX/SROS
+- `backups/<node>.json` for SRL
 
-## 4) Dry-run restore
+## 3) Restore
 ```
 docker run --rm -t \
   -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/nck-backups" \
-  ghcr.io/asadarafat/ne-config-kit:latest restore --check
+  -v "$PWD/backups:/backups" \
+  ne-config-kit:local \
+  --restore --lab /clab/clab-topo.clab.yml --out /backups
 ```
 
-## 5) Restore for real
+## Credentials
+Override defaults with env vars:
 ```
-docker run --rm -t \
-  -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/nck-backups" \
-  ghcr.io/asadarafat/ne-config-kit:latest restore
-```
-
-## Restoring a specific archive
-Restore always reads `backup_filename`. To restore a timestamped archive, set
-`backup_filename` to that archive name in `example/nck-config.yaml`, then run
-`restore` again.
-
-## Optional: custom config location
-If you store the config elsewhere, pass:
-```
--e NCK_CONFIG=/clab/nck-config.yaml
+-e CISCO_USERNAME=clab -e CISCO_PASSWORD=clab@123 \
+-e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD=admin@123 \
+-e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD=admin \
+-e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!'
 ```
 
 ## Cleanup

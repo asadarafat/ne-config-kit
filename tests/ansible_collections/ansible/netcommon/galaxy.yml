@@ -1,4 +1,0 @@
-namespace: ansible
-name: netcommon
-version: 0.0.0
-description: Test stub collection for ne-config-kit regression runs.

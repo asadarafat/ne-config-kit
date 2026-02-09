@@ -2,7 +2,7 @@
 name: ne-config-kit-example
 
 # Minimal containerlab topology: one SR Linux device.
-# Run the NCK container separately (see README).
+# Run the Scrapligo tool separately (see README).
 
 topology:
   nodes:

@@ -1,9 +1,0 @@
----
-clab_inventory: "/tests/inventory.yml"
-target_hosts: "testdevice"
-backup_root: "/backups/netconf"
-backup_filename: "running.conf"
-
-backup_transport: netconf
-ansible_connection: local
-netconf_source: running
