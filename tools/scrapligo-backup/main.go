@@ -45,6 +45,8 @@ type Creds struct {
 	Pass string
 }
 
+var errUnsupportedKind = errors.New("unsupported kind")
+
 type Inventory struct {
 	All InventoryGroup `yaml:"all"`
 }
@@ -128,6 +130,10 @@ func main() {
 		printf("Starting backup...")
 		for _, node := range nodes {
 			if err := backupNode(node, *outDir, creds); err != nil {
+				if errors.Is(err, errUnsupportedKind) {
+					printf("Skipping %s (%s): %v", node.Name, node.Host, err)
+					continue
+				}
 				printf("Backup failed for %s (%s): %v", node.Name, node.Host, err)
 				logStatus(*outDir, fmt.Sprintf("%s: backup failed: %v", node.Name, err))
 				continue
@@ -140,6 +146,10 @@ func main() {
 	printf("Starting restore...")
 	for _, node := range nodes {
 		if err := restoreNode(node, *outDir, creds); err != nil {
+			if errors.Is(err, errUnsupportedKind) {
+				printf("Skipping %s (%s): %v", node.Name, node.Host, err)
+				continue
+			}
 			printf("Restore failed for %s (%s): %v", node.Name, node.Host, err)
 			logStatus(*outDir, fmt.Sprintf("%s: restore failed: %v", node.Name, err))
 			continue
@@ -336,7 +346,7 @@ func platformForKind(kind string) (string, error) {
 	case "srl":
 		return "nokia_srl", nil
 	default:
-		return "", fmt.Errorf("unsupported kind %q", kind)
+		return "", fmt.Errorf("%w %q", errUnsupportedKind, kind)
 	}
 }
 
