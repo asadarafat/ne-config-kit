@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
+	"github.com/scrapli/scrapligo/channel"
 	"github.com/scrapli/scrapligo/driver/network"
-	"github.com/scrapli/scrapligo/operation"
-	"github.com/scrapli/scrapligo/options"
+	driveroptions "github.com/scrapli/scrapligo/driver/options"
 	"github.com/scrapli/scrapligo/platform"
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v3"
@@ -286,9 +286,9 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 	p, err := platform.NewPlatform(
 		platformName,
 		host,
-		options.WithAuthUsername(creds.User),
-		options.WithAuthPassword(creds.Pass),
-		options.WithAuthStrictKey(false),
+		driveroptions.WithAuthUsername(creds.User),
+		driveroptions.WithAuthPassword(creds.Pass),
+		driveroptions.WithAuthNoStrictKey(),
 	)
 	if err != nil {
 		return nil, err
@@ -401,13 +401,19 @@ func restoreCisco(node NodeInfo, outDir, platformName string, creds Creds) error
 }
 
 func ciscoCommitReplace(conn *network.Driver) error {
-	events := []*operation.InteractiveEvent{
-		operation.NewInteractiveEvent("commit replace", "(?i)(proceed|confirm|replace|yes/no|\[no\])"),
-		operation.NewInteractiveEvent("yes", "(?i)(config|#)"),
+	events := []*channel.SendInteractiveEvent{
+		{
+			ChannelInput:    "commit replace",
+			ChannelResponse: `(?i)(proceed|confirm|replace|yes/no|\[no\])`,
+		},
+		{
+			ChannelInput: "yes",
+		},
 	}
 	_, err := conn.SendInteractive(events)
 	return err
 }
+
 
 func restoreJuniper(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Restoring Juniper vMX %s (%s)...", node.Name, node.Host)
