@@ -7,7 +7,7 @@ WORKDIR /src/tools/scrapligo-backup
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/nck-scrapli .
 
-FROM debian:bookworm-slim
+FROM debian:bullseye-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssh-client \
