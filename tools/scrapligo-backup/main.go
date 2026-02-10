@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -490,6 +491,9 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithTransportType(transport.StandardTransport),
 		driveroptions.WithTimeoutOps(opTimeout),
 	}
+	if platformName == "vr-sros" {
+		options = append(options, driveroptions.WithPromptPattern(srosPromptPattern()))
+	}
 	if scrapliLogger != nil {
 		options = append(options, driveroptions.WithLogger(scrapliLogger))
 	}
@@ -505,6 +509,11 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		return nil, err
 	}
 	return driver, nil
+}
+
+func srosPromptPattern() *regexp.Regexp {
+	// Match either the normal prompt or the config-context marker line.
+	return regexp.MustCompile(`(?m)^(?:[A-Za-z]:.*#\s*|\*?\[[^\]]+\]\s*)$`)
 }
 
 func backupCisco(node NodeInfo, outDir, platformName string, creds Creds) error {
