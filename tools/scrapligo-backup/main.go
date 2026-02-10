@@ -538,6 +538,7 @@ func connectCisco(host string, creds Creds) (*network.Driver, error) {
 	if err == nil {
 		return driver, nil
 	}
+	lastErr := err
 	if !isSSHHandshakeErr(err) {
 		return nil, err
 	}
@@ -546,7 +547,20 @@ func connectCisco(host string, creds Creds) (*network.Driver, error) {
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {
 		logrus.Debugf("cisco iosxr ssh legacy+defaults: kex=%v ciphers=%v", legacyKexs, legacyCiphers)
 	}
-	return connectWithOptions("cisco_iosxr", host, creds, ciscoLegacySSHOptions())
+	driver, err = connectWithOptions("cisco_iosxr", host, creds, ciscoLegacySSHOptions())
+	if err == nil {
+		return driver, nil
+	}
+	lastErr = err
+	if isSSHHandshakeErr(err) && sshBinaryAvailable() {
+		logrus.Warnf("cisco iosxr ssh handshake failed with legacy crypto: %v; retrying with system transport", err)
+		driver, err = connectWithOptions("cisco_iosxr", host, creds, ciscoSystemSSHOptions())
+		if err == nil {
+			return driver, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 func ciscoLegacySSHOptions() []util.Option {
@@ -554,6 +568,16 @@ func ciscoLegacySSHOptions() []util.Option {
 	return []util.Option{
 		driveroptions.WithStandardTransportExtraKexs(kexs),
 		driveroptions.WithStandardTransportExtraCiphers(ciphers),
+	}
+}
+
+func ciscoSystemSSHOptions() []util.Option {
+	return []util.Option{
+		driveroptions.WithTransportType(transport.SystemTransport),
+		driveroptions.WithSystemTransportOpenArgs([]string{
+			"-o", "PreferredAuthentications=password",
+			"-o", "PubkeyAuthentication=no",
+		}),
 	}
 }
 
@@ -581,6 +605,17 @@ func isSSHHandshakeErr(err error) bool {
 	return strings.Contains(msg, "handshake failed") ||
 		strings.Contains(msg, "no common algorithm") ||
 		strings.Contains(msg, "unable to negotiate")
+}
+
+func sshBinaryAvailable() bool {
+	_, err := exec.LookPath("ssh")
+	if err != nil {
+		if logrus.IsLevelEnabled(logrus.DebugLevel) {
+			logrus.Debugf("ssh binary not found for system transport fallback: %v", err)
+		}
+		return false
+	}
+	return true
 }
 
 func sshDefaults() (ciphers []string, kexs []string) {
