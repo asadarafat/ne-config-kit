@@ -17,6 +17,10 @@ example/*.clab.yml.annotations.json
 .vault_pass
 **/.vault_pass
 image/ansible-config/group_vars/routers/vault.yml
+.env
+.env.*
+!.env.example
+!.env.nck.example
 ref-plan.md
 plan.md
 backup-restore.sh

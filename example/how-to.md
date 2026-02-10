@@ -11,12 +11,9 @@ clab deploy -t sp-mv.clab.yaml --reconfigure
 ## 2) Run a backup (container)
 ```bash
 docker run --rm -t --user 0 \
+  --env-file "$PWD/.env.nck" \
   -v "$PWD:/clab:ro" \
   -v "$PWD/startup-configs:/backups" \
-  -e CISCO_USERNAME=clab -e CISCO_PASSWORD='clab@123' \
-  -e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD='admin@123' \
-  -e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD=admin \
-  -e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!' \
   ghcr.io/asadarafat/ne-config-kit:latest \
   --backup \
   --lab /clab/sp-mv.clab.yaml \
@@ -31,12 +28,9 @@ Results:
 ## 3) Restore
 ```bash
 docker run --rm -t --user 0 \
+  --env-file "$PWD/.env.nck" \
   -v "$PWD:/clab:ro" \
   -v "$PWD/startup-configs:/backups" \
-  -e CISCO_USERNAME=clab -e CISCO_PASSWORD='clab@123' \
-  -e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD='admin@123' \
-  -e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD=admin \
-  -e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!' \
   ghcr.io/asadarafat/ne-config-kit:latest \
   --restore \
   --lab /clab/sp-mv.clab.yaml \
@@ -48,12 +42,9 @@ docker run --rm -t --user 0 \
 Backup:
 ```bash
 docker run --rm -t --user 0 \
+  --env-file "$PWD/.env.nck" \
   -v "$PWD:/clab:ro" \
   -v "$PWD/startup-configs:/backups" \
-  -e CISCO_USERNAME=clab -e CISCO_PASSWORD='clab@123' \
-  -e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD='admin@123' \
-  -e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD=admin \
-  -e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!' \
   ghcr.io/asadarafat/ne-config-kit:latest \
   --backup \
   --lab /clab/sp-mv.clab.yaml \
@@ -66,12 +57,9 @@ docker run --rm -t --user 0 \
 Restore:
 ```bash
 docker run --rm -t --user 0 \
+  --env-file "$PWD/.env.nck" \
   -v "$PWD:/clab:ro" \
   -v "$PWD/startup-configs:/backups" \
-  -e CISCO_USERNAME=clab -e CISCO_PASSWORD='clab@123' \
-  -e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD='admin@123' \
-  -e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD=admin \
-  -e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!' \
   ghcr.io/asadarafat/ne-config-kit:latest \
   --restore \
   --lab /clab/sp-mv.clab.yaml \
@@ -82,12 +70,19 @@ docker run --rm -t --user 0 \
 ```
 
 ## Credentials
-Override defaults with env vars:
+Store credentials in a local env file (do not commit it):
 ```bash
--e CISCO_USERNAME=clab -e CISCO_PASSWORD=clab@123 \
--e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD=admin@123 \
--e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD=admin \
--e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!'
+cat > .env.nck <<'EOF'
+CISCO_USERNAME=<set-me>
+CISCO_PASSWORD=<set-me>
+JUNIPER_USERNAME=<set-me>
+JUNIPER_PASSWORD=<set-me>
+NOKIA_SROS_USERNAME=<set-me>
+NOKIA_SROS_PASSWORD=<set-me>
+NOKIA_SRL_USERNAME=<set-me>
+NOKIA_SRL_PASSWORD=<set-me>
+EOF
+chmod 600 .env.nck
 ```
 
 ## Cleanup

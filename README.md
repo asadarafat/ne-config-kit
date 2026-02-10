@@ -44,46 +44,106 @@ go run ./tools/scrapligo-backup --restore \
   --out backups
 ```
 
-## Quick start (container)
-Build locally:
+## Quick start (container, hands-on)
+1) Pull image:
 ```bash
-docker build -t ne-config-kit:local .
+docker pull ghcr.io/asadarafat/ne-config-kit:latest
 ```
 
-Backup:
+2) Prepare local backup folder and credentials file:
 ```bash
-docker run --rm -t \
-  -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/backups" \
-  ne-config-kit:local \
+mkdir -p startup-configs
+
+cat > .env.nck <<'EOF'
+CISCO_USERNAME=<set-me>
+CISCO_PASSWORD=<set-me>
+JUNIPER_USERNAME=<set-me>
+JUNIPER_PASSWORD=<set-me>
+NOKIA_SROS_USERNAME=<set-me>
+NOKIA_SROS_PASSWORD=<set-me>
+NOKIA_SRL_USERNAME=<set-me>
+NOKIA_SRL_PASSWORD=<set-me>
+EOF
+
+chmod 600 .env.nck
+```
+
+3) Run backup:
+```bash
+docker run --rm -t --user 0 \
+  --env-file "$PWD/.env.nck" \
+  -v "$PWD:/clab:ro" \
+  -v "$PWD/startup-configs:/backups" \
+  ghcr.io/asadarafat/ne-config-kit:latest \
   --backup \
-  --lab /clab/clab-topo.clab.yml \
-  --out /backups
+  --lab /clab/sp-mv.clab.yaml \
+  --inventory /clab/clab-nokia-sp-mv/ansible-inventory.yml \
+  --out /backups \
+  --debug \
+  --only R01-nokia
 ```
 
-Restore:
+4) Run restore:
 ```bash
-docker run --rm -t \
-  -v "$PWD/example:/clab:ro" \
-  -v "$PWD/backups:/backups" \
-  ne-config-kit:local \
+docker run --rm -t --user 0 \
+  --env-file "$PWD/.env.nck" \
+  -v "$PWD:/clab:ro" \
+  -v "$PWD/startup-configs:/backups" \
+  ghcr.io/asadarafat/ne-config-kit:latest \
   --restore \
-  --lab /clab/clab-topo.clab.yml \
-  --out /backups
+  --lab /clab/sp-mv.clab.yaml \
+  --inventory /clab/clab-nokia-sp-mv/ansible-inventory.yml \
+  --out /backups \
+  --debug \
+  --only R02-cisco
 ```
 
-## Common flags
-- `--inventory <path>`: optional Ansible inventory file (ansible_host fallback)
-- `--only <node1,node2>`: target subset of nodes
-- `--debug`: enables verbose logs (including Scrapli debug output)
-- `--skip-health`: skips container health checks
+## Flags explained
+Docker flags:
+- `--rm`: remove container after command exits.
+- `-t`: allocate a TTY (cleaner CLI output).
+- `--user 0`: run as root in container (useful for file permissions/SSH tooling).
+- `--env-file "$PWD/.env.nck"`: load credentials from a local env file.
+- `-v "$PWD:/clab:ro"`: mount current clab working directory as read-only input at `/clab`.
+- `-v "$PWD/startup-configs:/backups"`: mount backup/restore files at `/backups`.
+- `-e KEY=VALUE`: optional alternative to `--env-file` for ad-hoc overrides.
+
+Tool flags:
+- `--backup`: run backup flow.
+- `--restore`: run restore flow.
+- `--lab /clab/sp-mv.clab.yaml`: topology file path inside container.
+- `--inventory /clab/clab-nokia-sp-mv/ansible-inventory.yml`: inventory fallback for `ansible_host`.
+- `--out /backups`: output/input directory for config files.
+- `--debug`: enable verbose logs (including Scrapli debug output).
+- `--only R01-nokia` or `--only R02-cisco`: run operation only for selected node(s).
+- `--skip-health`: optional, skip container health checks before execution.
 
 ## Credentials
-Set credentials via environment variables:
-- `CISCO_USERNAME`, `CISCO_PASSWORD` (default `clab` / `clab@123`)
-- `JUNIPER_USERNAME`, `JUNIPER_PASSWORD` (default `admin` / `admin@123`)
-- `NOKIA_SROS_USERNAME`, `NOKIA_SROS_PASSWORD` (default `admin` / `admin`)
-- `NOKIA_SRL_USERNAME`, `NOKIA_SRL_PASSWORD` (default `admin` / `NokiaSrl1!`)
+Do not commit real credentials to Git.
+
+If you did not create `.env.nck` in the hands-on section above, create it with:
+```bash
+cat > .env.nck <<'EOF'
+CISCO_USERNAME=<set-me>
+CISCO_PASSWORD=<set-me>
+JUNIPER_USERNAME=<set-me>
+JUNIPER_PASSWORD=<set-me>
+NOKIA_SROS_USERNAME=<set-me>
+NOKIA_SROS_PASSWORD=<set-me>
+NOKIA_SRL_USERNAME=<set-me>
+NOKIA_SRL_PASSWORD=<set-me>
+EOF
+chmod 600 .env.nck
+```
+
+Variables used by the tool:
+- `CISCO_USERNAME`, `CISCO_PASSWORD`
+- `JUNIPER_USERNAME`, `JUNIPER_PASSWORD`
+- `NOKIA_SROS_USERNAME`, `NOKIA_SROS_PASSWORD`
+- `NOKIA_SRL_USERNAME`, `NOKIA_SRL_PASSWORD`
+
+Note:
+- The binary has built-in lab defaults for convenience, but for secure usage you should always set credentials explicitly via env file or environment variables.
 
 ## Supported kinds
 The tool reads `kind` and `mgmt-ipv4` from topology (with inventory fallback).
