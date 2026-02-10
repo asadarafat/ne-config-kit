@@ -572,13 +572,19 @@ func ciscoLegacySSHOptions() []util.Option {
 }
 
 func ciscoSystemSSHOptions() []util.Option {
-	return []util.Option{
+	options := []util.Option{
 		driveroptions.WithTransportType(transport.SystemTransport),
 		driveroptions.WithSystemTransportOpenArgs([]string{
 			"-o", "PreferredAuthentications=password",
 			"-o", "PubkeyAuthentication=no",
 		}),
 	}
+	if cfg := strings.TrimSpace(os.Getenv("NCK_SSH_CONFIG")); cfg != "" {
+		options = append(options, driveroptions.WithSSHConfigFile(cfg))
+	} else {
+		options = append(options, driveroptions.WithSSHConfigFileSystem())
+	}
+	return options
 }
 
 func ciscoLegacySSHLists() (ciphers []string, kexs []string) {
