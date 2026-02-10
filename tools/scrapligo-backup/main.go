@@ -491,7 +491,7 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithTransportType(transport.StandardTransport),
 		driveroptions.WithTimeoutOps(opTimeout),
 	}
-	if platformName == "vr-sros" {
+	if platformName == "nokia_sros" {
 		options = append(options, driveroptions.WithPromptPattern(srosPromptPattern()))
 	}
 	if scrapliLogger != nil {
