@@ -341,6 +341,8 @@ func normalizeKind(kind string) string {
 		return "vr-vmx"
 	case "nokia_sros":
 		return "vr-sros"
+	case "nokia_srsim":
+		return "vr-sros"
 	case "nokia_srlinux":
 		return "srl"
 	default:

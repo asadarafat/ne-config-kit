@@ -15,7 +15,7 @@ docker run --rm -t --user 0 \
   -v "$PWD/startup-configs:/backups" \
   -e CISCO_USERNAME=clab -e CISCO_PASSWORD='clab@123' \
   -e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD='admin@123' \
-  -e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD=admin \
+  -e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD='NokiaSros1!' \
   -e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!' \
   ghcr.io/asadarafat/ne-config-kit:latest \
   --backup \
@@ -33,6 +33,10 @@ Results:
 docker run --rm -t --user 0 \
   -v "$PWD:/clab:ro" \
   -v "$PWD/startup-configs:/backups" \
+  -e CISCO_USERNAME=clab -e CISCO_PASSWORD='clab@123' \
+  -e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD='admin@123' \
+  -e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD='NokiaSros1!' \
+  -e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!' \
   ghcr.io/asadarafat/ne-config-kit:latest \
   --restore \
   --timeout 10m \
@@ -47,7 +51,7 @@ Override defaults with env vars:
 ```
 -e CISCO_USERNAME=clab -e CISCO_PASSWORD=clab@123 \
 -e JUNIPER_USERNAME=admin -e JUNIPER_PASSWORD=admin@123 \
--e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD=admin \
+-e NOKIA_SROS_USERNAME=admin -e NOKIA_SROS_PASSWORD='NokiaSros1!' \
 -e NOKIA_SRL_USERNAME=admin -e NOKIA_SRL_PASSWORD='NokiaSrl1!'
 ```
 
