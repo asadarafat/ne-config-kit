@@ -9,3 +9,9 @@ topology:
     srl1:
       kind: nokia_srlinux
       image: ghcr.io/nokia/srlinux:latest
+
+    sros1:
+      kind: nokia_srsim
+      image: registry.srlinux.dev/pub/nokia_srsim:25.7.R2
+      type: sr-1s
+      license: ../../license/sros.txt
