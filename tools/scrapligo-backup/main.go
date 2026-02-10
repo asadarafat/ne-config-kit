@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/sftp"
 	"github.com/scrapli/scrapligo/channel"
 	"github.com/scrapli/scrapligo/driver/network"
+	opoptions "github.com/scrapli/scrapligo/driver/opoptions"
 	driveroptions "github.com/scrapli/scrapligo/driver/options"
 	scraplilogging "github.com/scrapli/scrapligo/logging"
 	"github.com/scrapli/scrapligo/platform"
@@ -492,7 +493,10 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithTimeoutOps(opTimeout),
 	}
 	if platformName == "nokia_sros" {
-		options = append(options, driveroptions.WithPromptPattern(srosPromptPattern()))
+		options = append(options,
+			driveroptions.WithPrivilegeLevels(srosPrivilegeLevels()),
+			driveroptions.WithDefaultDesiredPriv("exec"),
+		)
 	}
 	if scrapliLogger != nil {
 		options = append(options, driveroptions.WithLogger(scrapliLogger))
@@ -508,12 +512,41 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 	if err := driver.Open(); err != nil {
 		return nil, err
 	}
+	if platformName == "nokia_sros" {
+		if err := driver.UpdatePrivileges(); err != nil {
+			return nil, err
+		}
+	}
 	return driver, nil
 }
 
 func srosPromptPattern() *regexp.Regexp {
 	// Match any line that ends with a prompt char, regardless of hostname changes.
 	return regexp.MustCompile(`(?m)^.*[>#]\s*$`)
+}
+
+func srosPrivilegeLevels() map[string]*network.PrivilegeLevel {
+	return map[string]*network.PrivilegeLevel{
+		"exec": {
+			Name:        "exec",
+			Pattern:     `(?m)^[A-Za-z]:[^\r\n]*[>#]\s*$`,
+			NotContains: []string{"[pr:/configure]", "[ex:/configure]"},
+		},
+		"configuration-private": {
+			Name:         "configuration-private",
+			Pattern:      `(?m)^\*?\[pr:/configure\]\s*$`,
+			PreviousPriv: "exec",
+			Deescalate:   "exit",
+			Escalate:     "configure private",
+		},
+		"configuration-exclusive": {
+			Name:         "configuration-exclusive",
+			Pattern:      `(?m)^\*?\[ex:/configure\]\s*$`,
+			PreviousPriv: "exec",
+			Deescalate:   "exit",
+			Escalate:     "configure exclusive",
+		},
+	}
 }
 
 func backupCisco(node NodeInfo, outDir, platformName string, creds Creds) error {
@@ -684,16 +717,11 @@ func restoreSros(node NodeInfo, outDir, platformName string, creds Creds) error 
 	if _, err := conn.SendCommand("environment more false"); err != nil {
 		return err
 	}
-	if _, err := conn.SendCommand("configure private"); err != nil {
-		return err
+	configs := []string{
+		fmt.Sprintf("load full-replace cf3:%s", remoteFilename),
+		"commit",
 	}
-	if _, err := conn.SendCommand(fmt.Sprintf("load full-replace cf3:%s", remoteFilename)); err != nil {
-		return err
-	}
-	if _, err := conn.SendCommand("commit"); err != nil {
-		return err
-	}
-	if _, err := conn.SendCommand("exit"); err != nil {
+	if _, err := conn.SendConfigs(configs, opoptions.WithPrivilegeLevel("configuration-private")); err != nil {
 		return err
 	}
 	// Ignore logout errors; the device may close the session immediately.
