@@ -19,3 +19,4 @@ example/*.clab.yml.annotations.json
 image/ansible-config/group_vars/routers/vault.yml
 ref-plan.md
 backup-restore.sh
+bash-cisco-restore.sh

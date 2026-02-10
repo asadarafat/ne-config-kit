@@ -54,13 +54,17 @@ type Creds struct {
 var errUnsupportedKind = errors.New("unsupported kind")
 
 const (
-	retryAttempts   = 3
-	retryDelay      = 2 * time.Second
-	defaultOpTimeout = 5 * time.Minute
+	retryAttempts              = 3
+	retryDelay                 = 2 * time.Second
+	defaultOpTimeout           = 5 * time.Minute
+	ciscoHandshakeAttempts     = 3
+	ciscoHandshakeRetryDelay   = 3 * time.Second
+	ciscoRestorePostUploadWait = 2 * time.Second
 )
 
 var opTimeout = defaultOpTimeout
 var scrapliLogger *scraplilogging.Instance
+var ciscoTimestampLinePattern = regexp.MustCompile(`^[A-Z][a-z][a-z] [A-Z][a-z][a-z] [ 0-9][0-9] [0-9:.]+ [A-Z][A-Z0-9_+:-]*$`)
 
 type Inventory struct {
 	All InventoryGroup `yaml:"all"`
@@ -534,7 +538,7 @@ func connectCisco(host string, creds Creds) (*network.Driver, error) {
 		defaultCiphers, defaultKexs := sshDefaults()
 		logrus.Debugf("cisco iosxr ssh defaults: kex=%v ciphers=%v", defaultKexs, defaultCiphers)
 	}
-	driver, err := connectWithOptions("cisco_iosxr", host, creds, nil)
+	driver, err := connectCiscoWithRetry("defaults", host, creds, nil)
 	if err == nil {
 		return driver, nil
 	}
@@ -547,18 +551,40 @@ func connectCisco(host string, creds Creds) (*network.Driver, error) {
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {
 		logrus.Debugf("cisco iosxr ssh legacy+defaults: kex=%v ciphers=%v", legacyKexs, legacyCiphers)
 	}
-	driver, err = connectWithOptions("cisco_iosxr", host, creds, ciscoLegacySSHOptions())
+	driver, err = connectCiscoWithRetry("legacy crypto", host, creds, ciscoLegacySSHOptions())
 	if err == nil {
 		return driver, nil
 	}
 	lastErr = err
 	if isSSHHandshakeErr(err) && sshBinaryAvailable() {
 		logrus.Warnf("cisco iosxr ssh handshake failed with legacy crypto: %v; retrying with system transport", err)
-		driver, err = connectWithOptions("cisco_iosxr", host, creds, ciscoSystemSSHOptions())
+		driver, err = connectCiscoWithRetry("system transport", host, creds, ciscoSystemSSHOptions())
 		if err == nil {
 			return driver, nil
 		}
 		lastErr = err
+	}
+	return nil, lastErr
+}
+
+func connectCiscoWithRetry(mode, host string, creds Creds, extra []util.Option) (*network.Driver, error) {
+	var lastErr error
+	for attempt := 1; attempt <= ciscoHandshakeAttempts; attempt++ {
+		driver, err := connectWithOptions("cisco_iosxr", host, creds, extra)
+		if err == nil {
+			return driver, nil
+		}
+		lastErr = err
+		if !isSSHHandshakeErr(err) {
+			return nil, err
+		}
+		if attempt < ciscoHandshakeAttempts {
+			logrus.Warnf(
+				"cisco iosxr %s handshake attempt %d/%d failed: %v; retrying in %s",
+				mode, attempt, ciscoHandshakeAttempts, err, ciscoHandshakeRetryDelay,
+			)
+			time.Sleep(ciscoHandshakeRetryDelay)
+		}
 	}
 	return nil, lastErr
 }
@@ -575,6 +601,7 @@ func ciscoSystemSSHOptions() []util.Option {
 	options := []util.Option{
 		driveroptions.WithTransportType(transport.SystemTransport),
 		driveroptions.WithSystemTransportOpenArgs([]string{
+			"-tt",
 			"-o", "PreferredAuthentications=password",
 			"-o", "PubkeyAuthentication=no",
 		}),
@@ -607,10 +634,13 @@ func isSSHHandshakeErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
+	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "handshake failed") ||
 		strings.Contains(msg, "no common algorithm") ||
-		strings.Contains(msg, "unable to negotiate")
+		strings.Contains(msg, "unable to negotiate") ||
+		strings.Contains(msg, "kex_exchange_identification") ||
+		strings.Contains(msg, "connection closed by remote host") ||
+		strings.Contains(msg, "read /dev/ptmx: input/output error")
 }
 
 func sshBinaryAvailable() bool {
@@ -752,10 +782,16 @@ func backupSrl(node NodeInfo, outDir, platformName string, creds Creds) error {
 func restoreCisco(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Restoring Cisco XR %s (%s)...", node.Name, node.Host)
 	localPath := filepath.Join(outDir, node.Name+".txt")
-	remotePath := fmt.Sprintf("/misc/scratch/%s.txt", node.Name)
-	if err := sftpUpload(node.Host, creds, localPath, remotePath); err != nil {
+	preparedPath, cleanup, err := prepareCiscoRestoreConfig(localPath)
+	if err != nil {
 		return err
 	}
+	defer cleanup()
+	remotePath := fmt.Sprintf("/misc/scratch/%s.txt", node.Name)
+	if err := sftpUpload(node.Host, creds, preparedPath, remotePath); err != nil {
+		return err
+	}
+	time.Sleep(ciscoRestorePostUploadWait)
 
 	conn, err := connectCisco(node.Host, creds)
 	if err != nil {
@@ -766,8 +802,17 @@ func restoreCisco(node NodeInfo, outDir, platformName string, creds Creds) error
 	if _, err := conn.SendCommand("configure terminal"); err != nil {
 		return err
 	}
-	if _, err := conn.SendCommand(fmt.Sprintf("load %s", remotePath)); err != nil {
+	loadResp, err := conn.SendCommand(fmt.Sprintf("load %s", remotePath))
+	if err != nil {
 		return err
+	}
+	if strings.Contains(strings.ToLower(loadResp.Result), "syntax/authorization errors") {
+		detailResp, detailErr := conn.SendCommand("show configuration failed load detail")
+		_, _ = conn.SendCommand("abort")
+		if detailErr != nil {
+			return fmt.Errorf("cisco load failed with syntax/authorization errors (detail unavailable): %w", detailErr)
+		}
+		return fmt.Errorf("cisco load failed with syntax/authorization errors:\n%s", strings.TrimSpace(detailResp.Result))
 	}
 
 	return ciscoCommitReplace(conn)
@@ -777,16 +822,60 @@ func ciscoCommitReplace(conn *network.Driver) error {
 	events := []*channel.SendInteractiveEvent{
 		{
 			ChannelInput:    "commit replace",
-			ChannelResponse: `(?i)(proceed|confirm|replace|yes/no|\[no\])`,
+			ChannelResponse: `(?i)(do you wish to proceed\?.*\[no\]:|proceed.*\[no\]:|\[confirm\])`,
 		},
 		{
-			ChannelInput: "yes",
+			ChannelInput:    "yes",
+			ChannelResponse: `(?m)\(config\)#\s*$`,
 		},
 	}
 	_, err := conn.SendInteractive(events)
 	return err
 }
 
+func prepareCiscoRestoreConfig(localPath string) (preparedPath string, cleanup func(), err error) {
+	data, err := os.ReadFile(localPath)
+	if err != nil {
+		return "", nil, err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	sanitized := false
+	for i := range lines {
+		line := strings.TrimSuffix(lines[i], "\r")
+		if ciscoTimestampLinePattern.MatchString(line) {
+			lines[i] = "!! " + line
+			sanitized = true
+			continue
+		}
+		lines[i] = line
+	}
+	if !sanitized {
+		return localPath, func() {}, nil
+	}
+
+	tmp, err := os.CreateTemp("", "nck-cisco-restore-*.txt")
+	if err != nil {
+		return "", nil, err
+	}
+
+	joined := strings.Join(lines, "\n")
+	if _, err := tmp.WriteString(joined); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return "", nil, err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
+		return "", nil, err
+	}
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		logrus.Debugf("sanitized Cisco restore config %s -> %s", localPath, tmp.Name())
+	}
+	return tmp.Name(), func() {
+		_ = os.Remove(tmp.Name())
+	}, nil
+}
 
 func restoreJuniper(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Restoring Juniper vMX %s (%s)...", node.Name, node.Host)
@@ -868,7 +957,6 @@ func restoreSrl(node NodeInfo, outDir, platformName string, creds Creds) error {
 	_, err = conn.SendCommand("exit all")
 	return err
 }
-
 
 func sftpConnect(host string, creds Creds) (*sftp.Client, *ssh.Client, error) {
 	cfg := &ssh.ClientConfig{
