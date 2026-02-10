@@ -494,6 +494,20 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithTransportType(transport.StandardTransport),
 		driveroptions.WithTimeoutOps(opTimeout),
 	}
+	if platformName == "cisco_iosxr" {
+		options = append(options,
+			driveroptions.WithStandardTransportExtraKexs([]string{
+				"diffie-hellman-group14-sha1",
+				"diffie-hellman-group-exchange-sha1",
+				"diffie-hellman-group1-sha1",
+			}),
+			driveroptions.WithStandardTransportExtraCiphers([]string{
+				"aes128-cbc",
+				"aes256-cbc",
+				"3des-cbc",
+			}),
+		)
+	}
 	if platformName == "nokia_sros" {
 		options = append(options,
 			driveroptions.WithPromptPattern(srosPromptPattern()),
