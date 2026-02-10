@@ -97,6 +97,11 @@ type runConfig struct {
 
 type nodeOperation func(node NodeInfo, outDir string, creds map[string]Creds) error
 
+type backupTargets struct {
+	LatestPath   string
+	SnapshotPath string
+}
+
 func main() {
 	cfg := parseRunConfig()
 	configureLogging(cfg.Debug)
@@ -763,6 +768,10 @@ func srosPrivilegeLevels() map[string]*network.PrivilegeLevel {
 
 func backupCisco(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Backing up Cisco XR %s (%s)...", node.Name, node.Host)
+	targets, err := createBackupTargets(outDir, node.Name, ".txt")
+	if err != nil {
+		return wrapErr("prepare Cisco backup paths", err)
+	}
 	conn, err := connectCisco(node.Host, creds)
 	if err != nil {
 		return wrapErr("connect to Cisco", err)
@@ -774,36 +783,50 @@ func backupCisco(node NodeInfo, outDir, platformName string, creds Creds) error 
 	if err != nil {
 		return wrapErr("run 'show running-config'", err)
 	}
-	path := filepath.Join(outDir, node.Name+".txt")
-	if err := os.WriteFile(path, []byte(resp.Result), 0o644); err != nil {
-		return wrapErr(fmt.Sprintf("write backup file %q", path), err)
+	data := []byte(resp.Result)
+	if err := os.WriteFile(targets.SnapshotPath, data, 0o644); err != nil {
+		return wrapErr(fmt.Sprintf("write backup snapshot %q", targets.SnapshotPath), err)
+	}
+	if err := updateLatestBackupLink(targets, data); err != nil {
+		return wrapErr("update latest Cisco backup", err)
 	}
 	return nil
 }
 
 func backupJuniper(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Backing up Juniper vMX %s (%s)...", node.Name, node.Host)
+	targets, err := createBackupTargets(outDir, node.Name, ".txt")
+	if err != nil {
+		return wrapErr("prepare Juniper backup paths", err)
+	}
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
 		return wrapErr("connect to Juniper", err)
 	}
 	defer closeWithDebug("juniper connection", conn)
 
-	localPath := filepath.Join(outDir, node.Name+".txt")
 	_, _ = conn.SendCommand("set cli screen-length 0")
 	_, _ = conn.SendCommand("set cli screen-width 0")
 	resp, err := conn.SendCommand("show configuration | display set")
 	if err != nil {
 		return wrapErr("run 'show configuration | display set'", err)
 	}
-	if err := os.WriteFile(localPath, []byte(resp.Result), 0o644); err != nil {
-		return wrapErr(fmt.Sprintf("write backup file %q", localPath), err)
+	data := []byte(resp.Result)
+	if err := os.WriteFile(targets.SnapshotPath, data, 0o644); err != nil {
+		return wrapErr(fmt.Sprintf("write backup snapshot %q", targets.SnapshotPath), err)
+	}
+	if err := updateLatestBackupLink(targets, data); err != nil {
+		return wrapErr("update latest Juniper backup", err)
 	}
 	return nil
 }
 
 func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Backing up Nokia SROS %s (%s)...", node.Name, node.Host)
+	targets, err := createBackupTargets(outDir, node.Name, ".txt")
+	if err != nil {
+		return wrapErr("prepare SROS backup paths", err)
+	}
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
 		return wrapErr("connect to SROS", err)
@@ -820,8 +843,10 @@ func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
 	}
 	time.Sleep(1 * time.Second)
 
-	localPath := filepath.Join(outDir, node.Name+".txt")
-	if err := srosDownload(node.Host, creds, node.Name+".txt", localPath); err == nil {
+	if err := srosDownload(node.Host, creds, node.Name+".txt", targets.SnapshotPath); err == nil {
+		if updateErr := updateLatestBackupLink(targets, nil); updateErr != nil {
+			return wrapErr("update latest SROS backup", updateErr)
+		}
 		return nil
 	}
 
@@ -830,14 +855,22 @@ func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
 	if err != nil {
 		return wrapErr("stream running config on SROS", err)
 	}
-	if err := os.WriteFile(localPath, []byte(resp.Result), 0o644); err != nil {
-		return wrapErr(fmt.Sprintf("write backup file %q", localPath), err)
+	data := []byte(resp.Result)
+	if err := os.WriteFile(targets.SnapshotPath, data, 0o644); err != nil {
+		return wrapErr(fmt.Sprintf("write backup snapshot %q", targets.SnapshotPath), err)
+	}
+	if err := updateLatestBackupLink(targets, data); err != nil {
+		return wrapErr("update latest SROS backup", err)
 	}
 	return nil
 }
 
 func backupSrl(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Backing up Nokia SRL %s (%s)...", node.Name, node.Host)
+	targets, err := createBackupTargets(outDir, node.Name, ".json")
+	if err != nil {
+		return wrapErr("prepare SRL backup paths", err)
+	}
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
 		return wrapErr("connect to SRL", err)
@@ -850,9 +883,11 @@ func backupSrl(node NodeInfo, outDir, platformName string, creds Creds) error {
 	}
 
 	remotePath := fmt.Sprintf("/home/admin/%s.json", node.Name)
-	localPath := filepath.Join(outDir, node.Name+".json")
-	if err := sftpDownload(node.Host, creds, remotePath, localPath); err != nil {
+	if err := sftpDownload(node.Host, creds, remotePath, targets.SnapshotPath); err != nil {
 		return wrapErr("download SRL config", err)
+	}
+	if err := updateLatestBackupLink(targets, nil); err != nil {
+		return wrapErr("update latest SRL backup", err)
 	}
 	return nil
 }
@@ -1324,6 +1359,67 @@ func srosUpload(host string, creds Creds, localPath, filename string) error {
 		lastErr = err
 	}
 	return fmt.Errorf("sros upload failed: %w", lastErr)
+}
+
+func createBackupTargets(outDir, nodeName, ext string) (backupTargets, error) {
+	snapshotDir := filepath.Join(outDir, nodeName)
+	if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
+		return backupTargets{}, wrapErr(
+			fmt.Sprintf("create snapshot directory %q", snapshotDir),
+			err,
+		)
+	}
+	timestamp := time.Now().UTC().Format("20060102-150405.000000000Z")
+	return backupTargets{
+		LatestPath:   filepath.Join(outDir, nodeName+ext),
+		SnapshotPath: filepath.Join(snapshotDir, timestamp+ext),
+	}, nil
+}
+
+func updateLatestBackupLink(targets backupTargets, snapshotData []byte) error {
+	if err := removePathIfExists(targets.LatestPath); err != nil {
+		return err
+	}
+
+	linkTarget, err := filepath.Rel(filepath.Dir(targets.LatestPath), targets.SnapshotPath)
+	if err == nil {
+		if linkErr := os.Symlink(linkTarget, targets.LatestPath); linkErr == nil {
+			return nil
+		} else if logrus.IsLevelEnabled(logrus.DebugLevel) {
+			logrus.Debugf(
+				"symlink latest backup %q -> %q failed: %v; falling back to copy",
+				targets.LatestPath, linkTarget, linkErr,
+			)
+		}
+	} else if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		logrus.Debugf(
+			"relative path for latest backup symlink failed (%s -> %s): %v; falling back to copy",
+			targets.LatestPath, targets.SnapshotPath, err,
+		)
+	}
+
+	if snapshotData == nil {
+		data, readErr := os.ReadFile(targets.SnapshotPath)
+		if readErr != nil {
+			return wrapErr(
+				fmt.Sprintf("read backup snapshot %q for latest copy fallback", targets.SnapshotPath),
+				readErr,
+			)
+		}
+		snapshotData = data
+	}
+	if err := os.WriteFile(targets.LatestPath, snapshotData, 0o644); err != nil {
+		return wrapErr(fmt.Sprintf("write latest backup file %q", targets.LatestPath), err)
+	}
+	return nil
+}
+
+func removePathIfExists(path string) error {
+	err := os.Remove(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return wrapErr(fmt.Sprintf("remove existing path %q", path), err)
+	}
+	return nil
 }
 
 func logStatus(outDir, message string) {

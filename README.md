@@ -83,6 +83,10 @@ docker run --rm -t --user 0 \
   --only R02-cisco
 ```
 
+Backup output layout:
+- Timestamped snapshots: `startup-configs/<node>/<timestamp>.txt` (or `.json`)
+- Latest pointer for restore compatibility: `startup-configs/<node>.txt` (or `.json`)
+
 ## Flags explained
 Docker flags:
 - `--rm`: remove container after command exits.

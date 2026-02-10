@@ -22,8 +22,10 @@ docker run --rm -t --user 0 \
 ```
 
 Results:
-- `startup-configs/<node>.txt` for XR/vMX/SROS
-- `startup-configs/<node>.json` for SRL
+- Timestamped snapshots under `startup-configs/<node>/<timestamp>.txt`
+  (or `.json` for SRL)
+- `startup-configs/<node>.txt` / `startup-configs/<node>.json` points to latest
+  snapshot for restore compatibility
 
 ## 3) Restore
 ```bash
