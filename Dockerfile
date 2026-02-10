@@ -15,7 +15,12 @@ RUN apt-get update \
 
 COPY --from=builder /out/nck-scrapli /usr/local/bin/nck-scrapli
 
+RUN useradd -u 10001 -m -s /bin/bash appuser \
+    && mkdir -p /work \
+    && chown -R 10001:10001 /work
+
 USER 10001
+ENV HOME=/home/appuser
 WORKDIR /work
 
 ENTRYPOINT ["/usr/local/bin/nck-scrapli"]
