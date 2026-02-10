@@ -530,6 +530,10 @@ func connectWithOptions(platformName, host string, creds Creds, extra []util.Opt
 
 func connectCisco(host string, creds Creds) (*network.Driver, error) {
 	// First try default crypto; some XR builds drop connections if weak algos are offered.
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		defaultCiphers, defaultKexs := sshDefaults()
+		logrus.Debugf("cisco iosxr ssh defaults: kex=%v ciphers=%v", defaultKexs, defaultCiphers)
+	}
 	driver, err := connectWithOptions("cisco_iosxr", host, creds, nil)
 	if err == nil {
 		return driver, nil
@@ -538,24 +542,35 @@ func connectCisco(host string, creds Creds) (*network.Driver, error) {
 		return nil, err
 	}
 	logrus.Warnf("cisco iosxr ssh handshake failed with defaults: %v; retrying with legacy ciphers/kex", err)
+	legacyCiphers, legacyKexs := ciscoLegacySSHLists()
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		logrus.Debugf("cisco iosxr ssh legacy+defaults: kex=%v ciphers=%v", legacyKexs, legacyCiphers)
+	}
 	return connectWithOptions("cisco_iosxr", host, creds, ciscoLegacySSHOptions())
 }
 
 func ciscoLegacySSHOptions() []util.Option {
+	ciphers, kexs := ciscoLegacySSHLists()
+	return []util.Option{
+		driveroptions.WithStandardTransportExtraKexs(kexs),
+		driveroptions.WithStandardTransportExtraCiphers(ciphers),
+	}
+}
+
+func ciscoLegacySSHLists() (ciphers []string, kexs []string) {
 	defaultCiphers, defaultKexs := sshDefaults()
 	// scrapligo "extra" lists replace defaults, so include defaults first.
-	return []util.Option{
-		driveroptions.WithStandardTransportExtraKexs(append(defaultKexs, []string{
-			"diffie-hellman-group14-sha1",
-			"diffie-hellman-group-exchange-sha1",
-			"diffie-hellman-group1-sha1",
-		}...)),
-		driveroptions.WithStandardTransportExtraCiphers(append(defaultCiphers, []string{
-			"aes128-cbc",
-			"aes256-cbc",
-			"3des-cbc",
-		}...)),
-	}
+	kexs = append(defaultKexs, []string{
+		"diffie-hellman-group14-sha1",
+		"diffie-hellman-group-exchange-sha1",
+		"diffie-hellman-group1-sha1",
+	}...)
+	ciphers = append(defaultCiphers, []string{
+		"aes128-cbc",
+		"aes256-cbc",
+		"3des-cbc",
+	}...)
+	return ciphers, kexs
 }
 
 func isSSHHandshakeErr(err error) bool {
