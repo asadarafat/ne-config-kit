@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -881,8 +882,11 @@ func restoreJuniper(node NodeInfo, outDir, platformName string, creds Creds) err
 	printf("Restoring Juniper vMX %s (%s)...", node.Name, node.Host)
 	localPath := filepath.Join(outDir, node.Name+".txt")
 	remotePath := fmt.Sprintf("/var/home/%s/%s.txt", creds.User, node.Name)
-	if err := sftpUpload(node.Host, creds, localPath, remotePath); err != nil {
-		return err
+	if err := scpUpload(node.Host, creds, localPath, remotePath); err != nil {
+		logrus.Warnf("juniper scp upload failed for %s (%s): %v; retrying with sftp", node.Name, node.Host, err)
+		if sftpErr := sftpUpload(node.Host, creds, localPath, remotePath); sftpErr != nil {
+			return fmt.Errorf("juniper upload failed via scp (%v) and sftp (%w)", err, sftpErr)
+		}
 	}
 
 	conn, err := connect(platformName, node.Host, creds)
@@ -891,17 +895,22 @@ func restoreJuniper(node NodeInfo, outDir, platformName string, creds Creds) err
 	}
 	defer conn.Close()
 
-	if _, err := conn.SendCommand("configure"); err != nil {
+	if _, err := conn.SendCommand("configure private"); err != nil {
 		return err
 	}
-	if _, err := conn.SendCommand(fmt.Sprintf("load replace %s", remotePath)); err != nil {
+	loadCmd, err := juniperLoadCommand(localPath, remotePath)
+	if err != nil {
 		return err
 	}
-	if _, err := conn.SendCommand("commit"); err != nil {
+	if _, err := conn.SendCommand(loadCmd); err != nil {
 		return err
 	}
-	_, err = conn.SendCommand("exit")
-	return err
+	_, _ = conn.SendCommand("show | compare | no-more")
+	if _, err := conn.SendCommand("commit and-quit"); err != nil {
+		return err
+	}
+	_, _ = conn.SendCommand("exit")
+	return nil
 }
 
 func restoreSros(node NodeInfo, outDir, platformName string, creds Creds) error {
@@ -1027,6 +1036,131 @@ func sftpUpload(host string, creds Creds, localPath, remotePath string) error {
 
 	_, err = io.Copy(dst, src)
 	return err
+}
+
+func scpUpload(host string, creds Creds, localPath, remotePath string) error {
+	cfg := &ssh.ClientConfig{
+		User:            creds.User,
+		Auth:            []ssh.AuthMethod{ssh.Password(creds.Pass)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         30 * time.Second,
+	}
+	conn, err := ssh.Dial("tcp", host+":22", cfg)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	session, err := conn.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	src, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	info, err := src.Stat()
+	if err != nil {
+		return err
+	}
+
+	if err := session.Start(fmt.Sprintf("scp -t %s", remotePath)); err != nil {
+		return err
+	}
+
+	outReader := bufio.NewReader(stdout)
+	errReader := bufio.NewReader(stderr)
+
+	if err := scpReadAck(outReader, errReader); err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprintf(stdin, "C0644 %d %s\n", info.Size(), filepath.Base(remotePath)); err != nil {
+		return err
+	}
+	if err := scpReadAck(outReader, errReader); err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(stdin, src); err != nil {
+		return err
+	}
+	if _, err := stdin.Write([]byte{0}); err != nil {
+		return err
+	}
+	if err := scpReadAck(outReader, errReader); err != nil {
+		return err
+	}
+
+	if err := stdin.Close(); err != nil {
+		return err
+	}
+	return session.Wait()
+}
+
+func scpReadAck(outReader, errReader *bufio.Reader) error {
+	code, err := outReader.ReadByte()
+	if err != nil {
+		return err
+	}
+	switch code {
+	case 0:
+		return nil
+	case 1, 2:
+		msg, _ := outReader.ReadString('\n')
+		msg = strings.TrimSpace(msg)
+		if msg == "" && errReader != nil && errReader.Buffered() > 0 {
+			errMsg, _ := errReader.ReadString('\n')
+			msg = strings.TrimSpace(errMsg)
+		}
+		if msg == "" {
+			msg = fmt.Sprintf("scp remote error (code %d)", code)
+		}
+		return errors.New(msg)
+	default:
+		return fmt.Errorf("unexpected scp ack byte: %d", code)
+	}
+}
+
+func juniperLoadCommand(localPath, remotePath string) (string, error) {
+	f, err := os.Open(localPath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "set ") {
+			return fmt.Sprintf("load set %s", remotePath), nil
+		}
+		return fmt.Sprintf("load override %s", remotePath), nil
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("load override %s", remotePath), nil
 }
 
 func srosDownload(host string, creds Creds, filename, localPath string) error {
