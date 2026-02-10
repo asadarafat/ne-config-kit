@@ -684,9 +684,6 @@ func restoreSros(node NodeInfo, outDir, platformName string, creds Creds) error 
 	if _, err := conn.SendCommand("commit"); err != nil {
 		return err
 	}
-	if _, err := conn.SendCommand("logout"); err != nil && !isIgnorableLogoutErr(err) {
-		return err
-	}
 	return nil
 }
 
@@ -714,16 +711,6 @@ func restoreSrl(node NodeInfo, outDir, platformName string, creds Creds) error {
 	return err
 }
 
-func isIgnorableLogoutErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, io.EOF) {
-		return true
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "EOF") || strings.Contains(msg, "errConnectionError")
-}
 
 func sftpConnect(host string, creds Creds) (*sftp.Client, *ssh.Client, error) {
 	cfg := &ssh.ClientConfig{
