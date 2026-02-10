@@ -512,8 +512,8 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 }
 
 func srosPromptPattern() *regexp.Regexp {
-	// Match either the normal prompt or the config-context marker line.
-	return regexp.MustCompile(`(?m)^(?:[A-Za-z]:.*#\s*|\*?\[[^\]]+\]\s*)$`)
+	// Match any line that ends with a prompt char, regardless of hostname changes.
+	return regexp.MustCompile(`(?m)^.*[>#]\s*$`)
 }
 
 func backupCisco(node NodeInfo, outDir, platformName string, creds Creds) error {
