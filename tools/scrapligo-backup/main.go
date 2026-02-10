@@ -829,7 +829,7 @@ func ciscoCommitReplace(conn *network.Driver) error {
 			ChannelResponse: `(?m)\(config\)#\s*$`,
 		},
 	}
-	_, err := conn.SendInteractive(events)
+	_, err := conn.SendInteractive(events, opoptions.WithPrivilegeLevel("configuration"))
 	return err
 }
 
