@@ -487,6 +487,10 @@ func restoreNode(node NodeInfo, outDir string, creds map[string]Creds) error {
 }
 
 func connect(platformName, host string, creds Creds) (*network.Driver, error) {
+	return connectWithOptions(platformName, host, creds, nil)
+}
+
+func connectWithOptions(platformName, host string, creds Creds, extra []util.Option) (*network.Driver, error) {
 	options := []util.Option{
 		driveroptions.WithAuthUsername(creds.User),
 		driveroptions.WithAuthPassword(creds.Pass),
@@ -494,21 +498,8 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithTransportType(transport.StandardTransport),
 		driveroptions.WithTimeoutOps(opTimeout),
 	}
-	if platformName == "cisco_iosxr" {
-		defaultCiphers, defaultKexs := sshDefaults()
-		// scrapligo "extra" lists replace defaults, so include defaults first.
-		options = append(options,
-			driveroptions.WithStandardTransportExtraKexs(append(defaultKexs, []string{
-				"diffie-hellman-group14-sha1",
-				"diffie-hellman-group-exchange-sha1",
-				"diffie-hellman-group1-sha1",
-			}...)),
-			driveroptions.WithStandardTransportExtraCiphers(append(defaultCiphers, []string{
-				"aes128-cbc",
-				"aes256-cbc",
-				"3des-cbc",
-			}...)),
-		)
+	if len(extra) > 0 {
+		options = append(options, extra...)
 	}
 	if platformName == "nokia_sros" {
 		options = append(options,
@@ -535,6 +526,46 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driver.UpdatePrivileges()
 	}
 	return driver, nil
+}
+
+func connectCisco(host string, creds Creds) (*network.Driver, error) {
+	// First try default crypto; some XR builds drop connections if weak algos are offered.
+	driver, err := connectWithOptions("cisco_iosxr", host, creds, nil)
+	if err == nil {
+		return driver, nil
+	}
+	if !isSSHHandshakeErr(err) {
+		return nil, err
+	}
+	logrus.Warnf("cisco iosxr ssh handshake failed with defaults: %v; retrying with legacy ciphers/kex", err)
+	return connectWithOptions("cisco_iosxr", host, creds, ciscoLegacySSHOptions())
+}
+
+func ciscoLegacySSHOptions() []util.Option {
+	defaultCiphers, defaultKexs := sshDefaults()
+	// scrapligo "extra" lists replace defaults, so include defaults first.
+	return []util.Option{
+		driveroptions.WithStandardTransportExtraKexs(append(defaultKexs, []string{
+			"diffie-hellman-group14-sha1",
+			"diffie-hellman-group-exchange-sha1",
+			"diffie-hellman-group1-sha1",
+		}...)),
+		driveroptions.WithStandardTransportExtraCiphers(append(defaultCiphers, []string{
+			"aes128-cbc",
+			"aes256-cbc",
+			"3des-cbc",
+		}...)),
+	}
+}
+
+func isSSHHandshakeErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "handshake failed") ||
+		strings.Contains(msg, "no common algorithm") ||
+		strings.Contains(msg, "unable to negotiate")
 }
 
 func sshDefaults() (ciphers []string, kexs []string) {
@@ -580,7 +611,7 @@ func srosPrivilegeLevels() map[string]*network.PrivilegeLevel {
 
 func backupCisco(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Backing up Cisco XR %s (%s)...", node.Name, node.Host)
-	conn, err := connect(platformName, node.Host, creds)
+	conn, err := connectCisco(node.Host, creds)
 	if err != nil {
 		return err
 	}
@@ -670,7 +701,7 @@ func restoreCisco(node NodeInfo, outDir, platformName string, creds Creds) error
 		return err
 	}
 
-	conn, err := connect(platformName, node.Host, creds)
+	conn, err := connectCisco(node.Host, creds)
 	if err != nil {
 		return err
 	}
