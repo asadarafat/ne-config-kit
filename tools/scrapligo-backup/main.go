@@ -495,17 +495,19 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driveroptions.WithTimeoutOps(opTimeout),
 	}
 	if platformName == "cisco_iosxr" {
+		defaultCiphers, defaultKexs := sshDefaults()
+		// scrapligo "extra" lists replace defaults, so include defaults first.
 		options = append(options,
-			driveroptions.WithStandardTransportExtraKexs([]string{
+			driveroptions.WithStandardTransportExtraKexs(append(defaultKexs, []string{
 				"diffie-hellman-group14-sha1",
 				"diffie-hellman-group-exchange-sha1",
 				"diffie-hellman-group1-sha1",
-			}),
-			driveroptions.WithStandardTransportExtraCiphers([]string{
+			}...)),
+			driveroptions.WithStandardTransportExtraCiphers(append(defaultCiphers, []string{
 				"aes128-cbc",
 				"aes256-cbc",
 				"3des-cbc",
-			}),
+			}...)),
 		)
 	}
 	if platformName == "nokia_sros" {
@@ -533,6 +535,18 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		driver.UpdatePrivileges()
 	}
 	return driver, nil
+}
+
+func sshDefaults() (ciphers []string, kexs []string) {
+	var cfg ssh.Config
+	cfg.SetDefaults()
+	if len(cfg.Ciphers) > 0 {
+		ciphers = append(ciphers, cfg.Ciphers...)
+	}
+	if len(cfg.KeyExchanges) > 0 {
+		kexs = append(kexs, cfg.KeyExchanges...)
+	}
+	return ciphers, kexs
 }
 
 func srosPromptPattern() *regexp.Regexp {
