@@ -494,6 +494,7 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 	}
 	if platformName == "nokia_sros" {
 		options = append(options,
+			driveroptions.WithPromptPattern(srosPromptPattern()),
 			driveroptions.WithPrivilegeLevels(srosPrivilegeLevels()),
 			driveroptions.WithDefaultDesiredPriv("exec"),
 		)
@@ -513,16 +514,14 @@ func connect(platformName, host string, creds Creds) (*network.Driver, error) {
 		return nil, err
 	}
 	if platformName == "nokia_sros" {
-		if err := driver.UpdatePrivileges(); err != nil {
-			return nil, err
-		}
+		driver.UpdatePrivileges()
 	}
 	return driver, nil
 }
 
 func srosPromptPattern() *regexp.Regexp {
-	// Match any line that ends with a prompt char, regardless of hostname changes.
-	return regexp.MustCompile(`(?m)^.*[>#]\s*$`)
+	// Match either exec prompt or config-context + prompt (two-line).
+	return regexp.MustCompile(`(?m)^(?:\*?\[(?:pr|ex):/configure\]\s*\n[A-Za-z]:[^\r\n]*[>#]\s*|[A-Za-z]:[^\r\n]*[>#]\s*)$`)
 }
 
 func srosPrivilegeLevels() map[string]*network.PrivilegeLevel {
@@ -534,14 +533,14 @@ func srosPrivilegeLevels() map[string]*network.PrivilegeLevel {
 		},
 		"configuration-private": {
 			Name:         "configuration-private",
-			Pattern:      `(?m)^\*?\[pr:/configure\]\s*$`,
+			Pattern:      `(?m)^\*?\[pr:/configure\]\s*\n[A-Za-z]:[^\r\n]*[>#]\s*$`,
 			PreviousPriv: "exec",
 			Deescalate:   "exit",
 			Escalate:     "configure private",
 		},
 		"configuration-exclusive": {
 			Name:         "configuration-exclusive",
-			Pattern:      `(?m)^\*?\[ex:/configure\]\s*$`,
+			Pattern:      `(?m)^\*?\[ex:/configure\]\s*\n[A-Za-z]:[^\r\n]*[>#]\s*$`,
 			PreviousPriv: "exec",
 			Deescalate:   "exit",
 			Escalate:     "configure exclusive",
