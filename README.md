@@ -4,7 +4,7 @@ ne-config-kit is a NetDevOps toolkit for backing up and restoring network
 configurations with Scrapligo (Go), focused on containerlab-style topologies.
 
 ## Purpose and scope
-- Git-friendly network configuration backup
+- Diff-friendly, version-control-ready configuration backups
 - Deterministic restore and rollback workflows
 - Works with lab topologies and inventory data
 - Vendor-agnostic, automation-first CLI workflow
@@ -26,23 +26,8 @@ tools/scrapligo-backup/
 ```
 
 ## Requirements
-- Docker (for container execution and lint tooling)
-- Go (only required for local `go run`/`go build` workflows)
-
-## Quick start (Go)
-Backup:
-```bash
-go run ./tools/scrapligo-backup --backup \
-  --lab example/clab-topo.clab.yml \
-  --out backups
-```
-
-Restore:
-```bash
-go run ./tools/scrapligo-backup --restore \
-  --lab example/clab-topo.clab.yml \
-  --out backups
-```
+- Docker (required for running the tool and lint workflow)
+- Go (optional, only for local source-based development/build)
 
 ## Quick start (container, hands-on)
 1) Pull image:
