@@ -684,7 +684,7 @@ func restoreSros(node NodeInfo, outDir, platformName string, creds Creds) error 
 	if _, err := conn.SendCommand("environment more false"); err != nil {
 		return err
 	}
-	if _, err := conn.SendCommand("configure exclusive"); err != nil {
+	if _, err := conn.SendCommand("configure private"); err != nil {
 		return err
 	}
 	if _, err := conn.SendCommand(fmt.Sprintf("load full-replace cf3:%s", remoteFilename)); err != nil {
@@ -693,6 +693,11 @@ func restoreSros(node NodeInfo, outDir, platformName string, creds Creds) error 
 	if _, err := conn.SendCommand("commit"); err != nil {
 		return err
 	}
+	if _, err := conn.SendCommand("exit"); err != nil {
+		return err
+	}
+	// Ignore logout errors; the device may close the session immediately.
+	_, _ = conn.SendCommand("logout")
 	return nil
 }
 
