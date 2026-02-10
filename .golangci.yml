@@ -1,0 +1,48 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gocyclo
+    - gocognit
+    - nestif
+    - dupl
+    - revive
+    - godox
+    - errorlint
+    - wrapcheck
+  settings:
+    gocyclo:
+      min-complexity: 15
+    gocognit:
+      min-complexity: 20
+    nestif:
+      min-complexity: 4
+    dupl:
+      threshold: 100
+    revive:
+      rules:
+        - name: var-naming
+        - name: line-length-limit
+          arguments:
+            - 120
+        - name: exported
+        - name: empty-lines
+        - name: error-strings
+        - name: error-return
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - dupl

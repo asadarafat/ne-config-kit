@@ -65,7 +65,10 @@ const (
 
 var opTimeout = defaultOpTimeout
 var scrapliLogger *scraplilogging.Instance
-var ciscoTimestampLinePattern = regexp.MustCompile(`^[A-Z][a-z][a-z] [A-Z][a-z][a-z] [ 0-9][0-9] [0-9:.]+ [A-Z][A-Z0-9_+:-]*$`)
+var ciscoTimestampLinePattern = regexp.MustCompile(
+	`^[A-Z][a-z][a-z] [A-Z][a-z][a-z] [ 0-9][0-9] [0-9:.]+ ` +
+		`[A-Z][A-Z0-9_+:-]*$`,
+)
 
 type Inventory struct {
 	All InventoryGroup `yaml:"all"`
@@ -80,7 +83,35 @@ type InventoryHost struct {
 	AnsibleHost string `yaml:"ansible_host"`
 }
 
+type runConfig struct {
+	LabPath       string
+	OutDir        string
+	InventoryPath string
+	Only          string
+	Backup        bool
+	Restore       bool
+	SkipHealth    bool
+	Debug         bool
+	Timeout       time.Duration
+}
+
+type nodeOperation func(node NodeInfo, outDir string, creds map[string]Creds) error
+
 func main() {
+	cfg := parseRunConfig()
+	configureLogging(cfg.Debug)
+	opTimeout = cfg.Timeout
+
+	if err := validateMode(cfg.Backup, cfg.Restore); err != nil {
+		exitWithUsage(err)
+	}
+
+	if err := run(cfg); err != nil {
+		fatalf("%v", err)
+	}
+}
+
+func parseRunConfig() runConfig {
 	labPath := flag.String("lab", "lab.yml", "Containerlab topology file")
 	outDir := flag.String("out", "mv-lab-config", "Output directory for configs")
 	inventoryPath := flag.String("inventory", "", "Optional path to containerlab ansible-inventory.yml")
@@ -91,9 +122,22 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable debug logging (includes scrapli debug output)")
 	only := flag.String("only", "", "Comma-separated node names to target (e.g. R01-nokia,R04-nokia)")
 	flag.Parse()
+	return runConfig{
+		LabPath:       *labPath,
+		OutDir:        *outDir,
+		InventoryPath: *inventoryPath,
+		Only:          *only,
+		Backup:        *backup,
+		Restore:       *restore,
+		SkipHealth:    *skipHealth,
+		Debug:         *debug,
+		Timeout:       *timeout,
+	}
+}
 
+func configureLogging(debug bool) {
 	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
-	if *debug {
+	if debug {
 		logrus.SetLevel(logrus.DebugLevel)
 		l, err := scraplilogging.NewInstance(
 			scraplilogging.WithLevel("debug"),
@@ -105,22 +149,57 @@ func main() {
 			scrapliLogger = l
 		}
 	}
-	opTimeout = *timeout
+}
 
-	if (*backup && *restore) || (!*backup && !*restore) {
-		exitWithUsage(errors.New("select exactly one of --backup or --restore"))
+func validateMode(backup, restore bool) error {
+	if (backup && restore) || (!backup && !restore) {
+		return errors.New("select exactly one of --backup or --restore")
+	}
+	return nil
+}
+
+func run(cfg runConfig) error {
+	lab, nodes, err := loadNodes(cfg)
+	if err != nil {
+		return err
 	}
 
-	lab, err := readLab(*labPath)
+	if err := os.MkdirAll(cfg.OutDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create output dir %q: %w", cfg.OutDir, err)
+	}
+
+	if !cfg.SkipHealth {
+		ok, healthErr := allNodesHealthy(lab.Name, nodes)
+		if healthErr != nil {
+			printf("Health check warning: %v", healthErr)
+		}
+		if !ok {
+			return errors.New("not all nodes are healthy; aborting")
+		}
+	}
+	creds := credentialsFromEnv()
+	if cfg.Backup {
+		printf("Starting backup...")
+		processNodes("backup", nodes, cfg.OutDir, creds, backupNode)
+		return nil
+	}
+
+	printf("Starting restore...")
+	processNodes("restore", nodes, cfg.OutDir, creds, restoreNode)
+	return nil
+}
+
+func loadNodes(cfg runConfig) (Lab, []NodeInfo, error) {
+	lab, err := readLab(cfg.LabPath)
 	if err != nil {
-		fatalf("failed to read lab file: %v", err)
+		return Lab{}, nil, fmt.Errorf("failed to read lab file: %w", err)
 	}
 
 	inventoryHosts := map[string]string(nil)
-	if invPath := resolveInventoryPath(*inventoryPath, *labPath, lab.Name); invPath != "" {
-		hosts, err := readInventoryHosts(invPath)
-		if err != nil {
-			printf("Inventory warning: failed to read %s: %v", invPath, err)
+	if invPath := resolveInventoryPath(cfg.InventoryPath, cfg.LabPath, lab.Name); invPath != "" {
+		hosts, invErr := readInventoryHosts(invPath)
+		if invErr != nil {
+			printf("Inventory warning: failed to read %s: %v", invPath, invErr)
 		} else {
 			inventoryHosts = hosts
 		}
@@ -128,30 +207,21 @@ func main() {
 
 	nodes, err := nodesFromLab(lab, inventoryHosts)
 	if err != nil {
-		fatalf("failed to parse nodes: %v", err)
+		return Lab{}, nil, fmt.Errorf("failed to parse nodes: %w", err)
 	}
-	if *only != "" {
-		nodes, err = filterNodes(nodes, *only)
-		if err != nil {
-			fatalf("failed to apply --only filter: %v", err)
-		}
+	if cfg.Only == "" {
+		return lab, nodes, nil
 	}
 
-	if err := os.MkdirAll(*outDir, 0o755); err != nil {
-		fatalf("failed to create output dir: %v", err)
+	nodes, err = filterNodes(nodes, cfg.Only)
+	if err != nil {
+		return Lab{}, nil, fmt.Errorf("failed to apply --only filter: %w", err)
 	}
+	return lab, nodes, nil
+}
 
-	if !*skipHealth {
-		ok, err := allNodesHealthy(lab.Name, nodes)
-		if err != nil {
-			printf("Health check warning: %v", err)
-		}
-		if !ok {
-			fatalf("not all nodes are healthy; aborting")
-		}
-	}
-
-	creds := map[string]Creds{
+func credentialsFromEnv() map[string]Creds {
+	return map[string]Creds{
 		"vr-xrv9k": {
 			User: getEnv("CISCO_USERNAME", "clab"),
 			Pass: getEnv("CISCO_PASSWORD", "clab@123"),
@@ -169,42 +239,24 @@ func main() {
 			Pass: getEnv("NOKIA_SRL_PASSWORD", "NokiaSrl1!"),
 		},
 	}
+}
 
-	if *backup {
-		printf("Starting backup...")
-		for _, node := range nodes {
-			err := retry(fmt.Sprintf("backup %s", node.Name), func() error {
-				return backupNode(node, *outDir, creds)
-			})
-			if err != nil {
-				if errors.Is(err, errUnsupportedKind) {
-					printf("Skipping %s (%s): %v", node.Name, node.Host, err)
-					continue
-				}
-				printf("Backup failed for %s (%s): %v", node.Name, node.Host, err)
-				logStatus(*outDir, fmt.Sprintf("%s: backup failed: %v", node.Name, err))
-				continue
-			}
-			logStatus(*outDir, fmt.Sprintf("%s: backup successful", node.Name))
-		}
-		return
-	}
-
-	printf("Starting restore...")
+func processNodes(action string, nodes []NodeInfo, outDir string, creds map[string]Creds, op nodeOperation) {
+	actionTitle := strings.ToUpper(action[:1]) + action[1:]
 	for _, node := range nodes {
-		err := retry(fmt.Sprintf("restore %s", node.Name), func() error {
-			return restoreNode(node, *outDir, creds)
+		err := retry(fmt.Sprintf("%s %s", action, node.Name), func() error {
+			return op(node, outDir, creds)
 		})
 		if err != nil {
 			if errors.Is(err, errUnsupportedKind) {
 				printf("Skipping %s (%s): %v", node.Name, node.Host, err)
 				continue
 			}
-			printf("Restore failed for %s (%s): %v", node.Name, node.Host, err)
-			logStatus(*outDir, fmt.Sprintf("%s: restore failed: %v", node.Name, err))
+			printf("%s failed for %s (%s): %v", actionTitle, node.Name, node.Host, err)
+			logStatus(outDir, fmt.Sprintf("%s: %s failed: %v", node.Name, action, err))
 			continue
 		}
-		logStatus(*outDir, fmt.Sprintf("%s: restore successful", node.Name))
+		logStatus(outDir, fmt.Sprintf("%s: %s successful", node.Name, action))
 	}
 }
 
@@ -226,6 +278,22 @@ func printf(format string, args ...any) {
 	logrus.Infof(format, args...)
 }
 
+func wrapErr(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
+
+func closeWithDebug(name string, closer io.Closer) {
+	if closer == nil {
+		return
+	}
+	if err := closer.Close(); err != nil {
+		logrus.Debugf("failed to close %s: %v", name, err)
+	}
+}
+
 func getEnv(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -237,10 +305,10 @@ func readLab(path string) (Lab, error) {
 	var lab Lab
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return lab, err
+		return lab, wrapErr(fmt.Sprintf("read lab file %q", path), err)
 	}
 	if err := yaml.Unmarshal(data, &lab); err != nil {
-		return lab, err
+		return lab, wrapErr("parse lab yaml", err)
 	}
 	return lab, nil
 }
@@ -257,17 +325,7 @@ func nodesFromLab(lab Lab, inventoryHosts map[string]string) ([]NodeInfo, error)
 			continue
 		}
 		kind := normalizeKind(node.Kind)
-		host := normalizeIP(node.MgmtIPv4)
-		if host == "" && len(inventoryHosts) > 0 {
-			if invHost, ok := inventoryHosts[name]; ok {
-				host = normalizeIP(invHost)
-			} else if lab.Name != "" {
-				clabName := fmt.Sprintf("clab-%s-%s", lab.Name, name)
-				if invHost, ok := inventoryHosts[clabName]; ok {
-					host = normalizeIP(invHost)
-				}
-			}
-		}
+		host := resolveNodeHost(name, node, lab.Name, inventoryHosts)
 		if host == "" {
 			printf("Skipping node %s: missing mgmt-ipv4/ansible_host", name)
 			continue
@@ -287,6 +345,24 @@ func nodesFromLab(lab Lab, inventoryHosts map[string]string) ([]NodeInfo, error)
 		return nodes[i].Name < nodes[j].Name
 	})
 	return nodes, nil
+}
+
+func resolveNodeHost(name string, node Node, labName string, inventoryHosts map[string]string) string {
+	host := normalizeIP(node.MgmtIPv4)
+	if host != "" || len(inventoryHosts) == 0 {
+		return host
+	}
+	if invHost, ok := inventoryHosts[name]; ok {
+		return normalizeIP(invHost)
+	}
+	if labName == "" {
+		return ""
+	}
+	clabName := fmt.Sprintf("clab-%s-%s", labName, name)
+	if invHost, ok := inventoryHosts[clabName]; ok {
+		return normalizeIP(invHost)
+	}
+	return ""
 }
 
 func filterNodes(nodes []NodeInfo, only string) ([]NodeInfo, error) {
@@ -378,11 +454,11 @@ func fileExists(path string) bool {
 func readInventoryHosts(path string) (map[string]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, wrapErr(fmt.Sprintf("read inventory file %q", path), err)
 	}
 	var inv Inventory
 	if err := yaml.Unmarshal(data, &inv); err != nil {
-		return nil, err
+		return nil, wrapErr("parse inventory yaml", err)
 	}
 	hosts := make(map[string]string)
 	flattenHosts(inv.All, hosts)
@@ -444,30 +520,26 @@ func platformForKind(kind string) (string, error) {
 }
 
 func backupNode(node NodeInfo, outDir string, creds map[string]Creds) error {
-	platformName, err := platformForKind(node.Kind)
-	if err != nil {
-		return err
-	}
-	vendorCreds, ok := creds[node.Kind]
-	if !ok {
-		return fmt.Errorf("missing credentials for kind %q", node.Kind)
-	}
-
-	switch node.Kind {
-	case "vr-xrv9k":
-		return backupCisco(node, outDir, platformName, vendorCreds)
-	case "vr-vmx":
-		return backupJuniper(node, outDir, platformName, vendorCreds)
-	case "vr-sros":
-		return backupSros(node, outDir, platformName, vendorCreds)
-	case "srl":
-		return backupSrl(node, outDir, platformName, vendorCreds)
-	default:
-		return fmt.Errorf("unsupported kind %q", node.Kind)
-	}
+	return runNodeOperation(node, outDir, creds, map[string]kindOperation{
+		"vr-xrv9k": backupCisco,
+		"vr-vmx":   backupJuniper,
+		"vr-sros":  backupSros,
+		"srl":      backupSrl,
+	})
 }
 
 func restoreNode(node NodeInfo, outDir string, creds map[string]Creds) error {
+	return runNodeOperation(node, outDir, creds, map[string]kindOperation{
+		"vr-xrv9k": restoreCisco,
+		"vr-vmx":   restoreJuniper,
+		"vr-sros":  restoreSros,
+		"srl":      restoreSrl,
+	})
+}
+
+type kindOperation func(NodeInfo, string, string, Creds) error
+
+func runNodeOperation(node NodeInfo, outDir string, creds map[string]Creds, operations map[string]kindOperation) error {
 	platformName, err := platformForKind(node.Kind)
 	if err != nil {
 		return err
@@ -476,19 +548,11 @@ func restoreNode(node NodeInfo, outDir string, creds map[string]Creds) error {
 	if !ok {
 		return fmt.Errorf("missing credentials for kind %q", node.Kind)
 	}
-
-	switch node.Kind {
-	case "vr-xrv9k":
-		return restoreCisco(node, outDir, platformName, vendorCreds)
-	case "vr-vmx":
-		return restoreJuniper(node, outDir, platformName, vendorCreds)
-	case "vr-sros":
-		return restoreSros(node, outDir, platformName, vendorCreds)
-	case "srl":
-		return restoreSrl(node, outDir, platformName, vendorCreds)
-	default:
-		return fmt.Errorf("unsupported kind %q", node.Kind)
+	op, ok := operations[node.Kind]
+	if !ok {
+		return fmt.Errorf("%w %q", errUnsupportedKind, node.Kind)
 	}
+	return op(node, outDir, platformName, vendorCreds)
 }
 
 func connect(platformName, host string, creds Creds) (*network.Driver, error) {
@@ -518,14 +582,14 @@ func connectWithOptions(platformName, host string, creds Creds, extra []util.Opt
 	}
 	p, err := platform.NewPlatform(platformName, host, options...)
 	if err != nil {
-		return nil, err
+		return nil, wrapErr("create platform", err)
 	}
 	driver, err := p.GetNetworkDriver()
 	if err != nil {
-		return nil, err
+		return nil, wrapErr("get network driver", err)
 	}
 	if err := driver.Open(); err != nil {
-		return nil, err
+		return nil, wrapErr("open network driver", err)
 	}
 	if platformName == "nokia_sros" {
 		driver.UpdatePrivileges()
@@ -543,7 +607,6 @@ func connectCisco(host string, creds Creds) (*network.Driver, error) {
 	if err == nil {
 		return driver, nil
 	}
-	lastErr := err
 	if !isSSHHandshakeErr(err) {
 		return nil, err
 	}
@@ -556,16 +619,15 @@ func connectCisco(host string, creds Creds) (*network.Driver, error) {
 	if err == nil {
 		return driver, nil
 	}
-	lastErr = err
-	if isSSHHandshakeErr(err) && sshBinaryAvailable() {
-		logrus.Warnf("cisco iosxr ssh handshake failed with legacy crypto: %v; retrying with system transport", err)
-		driver, err = connectCiscoWithRetry("system transport", host, creds, ciscoSystemSSHOptions())
-		if err == nil {
-			return driver, nil
-		}
-		lastErr = err
+	if !isSSHHandshakeErr(err) || !sshBinaryAvailable() {
+		return nil, err
 	}
-	return nil, lastErr
+	logrus.Warnf("cisco iosxr ssh handshake failed with legacy crypto: %v; retrying with system transport", err)
+	driver, err = connectCiscoWithRetry("system transport", host, creds, ciscoSystemSSHOptions())
+	if err == nil {
+		return driver, nil
+	}
+	return nil, err
 }
 
 func connectCiscoWithRetry(mode, host string, creds Creds, extra []util.Option) (*network.Driver, error) {
@@ -669,7 +731,10 @@ func sshDefaults() (ciphers []string, kexs []string) {
 
 func srosPromptPattern() *regexp.Regexp {
 	// Match either exec prompt or config-context + prompt (two-line).
-	return regexp.MustCompile(`(?m)^(?:\*?\[(?:pr|ex):/configure\]\s*\n[A-Za-z]:[^\r\n]*[>#]\s*|[A-Za-z]:[^\r\n]*[>#]\s*)$`)
+	return regexp.MustCompile(
+		`(?m)^(?:\*?\[(?:pr|ex):/configure\]\s*\n[A-Za-z]:[^\r\n]*[>#]\s*|` +
+			`[A-Za-z]:[^\r\n]*[>#]\s*)$`,
+	)
 }
 
 func srosPrivilegeLevels() map[string]*network.PrivilegeLevel {
@@ -700,52 +765,58 @@ func backupCisco(node NodeInfo, outDir, platformName string, creds Creds) error 
 	printf("Backing up Cisco XR %s (%s)...", node.Name, node.Host)
 	conn, err := connectCisco(node.Host, creds)
 	if err != nil {
-		return err
+		return wrapErr("connect to Cisco", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("cisco connection", conn)
 
 	_, _ = conn.SendCommand("terminal length 0")
 	resp, err := conn.SendCommand("show running-config")
 	if err != nil {
-		return err
+		return wrapErr("run 'show running-config'", err)
 	}
 	path := filepath.Join(outDir, node.Name+".txt")
-	return os.WriteFile(path, []byte(resp.Result), 0o644)
+	if err := os.WriteFile(path, []byte(resp.Result), 0o644); err != nil {
+		return wrapErr(fmt.Sprintf("write backup file %q", path), err)
+	}
+	return nil
 }
 
 func backupJuniper(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Backing up Juniper vMX %s (%s)...", node.Name, node.Host)
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
-		return err
+		return wrapErr("connect to Juniper", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("juniper connection", conn)
 
 	localPath := filepath.Join(outDir, node.Name+".txt")
 	_, _ = conn.SendCommand("set cli screen-length 0")
 	_, _ = conn.SendCommand("set cli screen-width 0")
 	resp, err := conn.SendCommand("show configuration | display set")
 	if err != nil {
-		return err
+		return wrapErr("run 'show configuration | display set'", err)
 	}
-	return os.WriteFile(localPath, []byte(resp.Result), 0o644)
+	if err := os.WriteFile(localPath, []byte(resp.Result), 0o644); err != nil {
+		return wrapErr(fmt.Sprintf("write backup file %q", localPath), err)
+	}
+	return nil
 }
 
 func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Backing up Nokia SROS %s (%s)...", node.Name, node.Host)
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
-		return err
+		return wrapErr("connect to SROS", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("sros connection", conn)
 
 	if _, err := conn.SendCommand("environment more false"); err != nil {
-		return err
+		return wrapErr("disable pager on SROS", err)
 	}
 	// Save to cf3 so SFTP can fetch from its root.
 	saveCmd := fmt.Sprintf("admin save cf3:/%s.txt", node.Name)
 	if _, err := conn.SendCommand(saveCmd); err != nil {
-		return err
+		return wrapErr("save running config on SROS", err)
 	}
 	time.Sleep(1 * time.Second)
 
@@ -757,27 +828,33 @@ func backupSros(node NodeInfo, outDir, platformName string, creds Creds) error {
 	// Fallback to streaming output if SFTP fails.
 	resp, err := conn.SendCommand("admin show configuration running")
 	if err != nil {
-		return err
+		return wrapErr("stream running config on SROS", err)
 	}
-	return os.WriteFile(localPath, []byte(resp.Result), 0o644)
+	if err := os.WriteFile(localPath, []byte(resp.Result), 0o644); err != nil {
+		return wrapErr(fmt.Sprintf("write backup file %q", localPath), err)
+	}
+	return nil
 }
 
 func backupSrl(node NodeInfo, outDir, platformName string, creds Creds) error {
 	printf("Backing up Nokia SRL %s (%s)...", node.Name, node.Host)
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
-		return err
+		return wrapErr("connect to SRL", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("srl connection", conn)
 
 	cmd := fmt.Sprintf("save file %s.json from running", node.Name)
 	if _, err := conn.SendCommand(cmd); err != nil {
-		return err
+		return wrapErr("save running config on SRL", err)
 	}
 
 	remotePath := fmt.Sprintf("/home/admin/%s.json", node.Name)
 	localPath := filepath.Join(outDir, node.Name+".json")
-	return sftpDownload(node.Host, creds, remotePath, localPath)
+	if err := sftpDownload(node.Host, creds, remotePath, localPath); err != nil {
+		return wrapErr("download SRL config", err)
+	}
+	return nil
 }
 
 func restoreCisco(node NodeInfo, outDir, platformName string, creds Creds) error {
@@ -785,27 +862,27 @@ func restoreCisco(node NodeInfo, outDir, platformName string, creds Creds) error
 	localPath := filepath.Join(outDir, node.Name+".txt")
 	preparedPath, cleanup, err := prepareCiscoRestoreConfig(localPath)
 	if err != nil {
-		return err
+		return wrapErr("prepare Cisco restore config", err)
 	}
 	defer cleanup()
 	remotePath := fmt.Sprintf("/misc/scratch/%s.txt", node.Name)
 	if err := sftpUpload(node.Host, creds, preparedPath, remotePath); err != nil {
-		return err
+		return wrapErr("upload Cisco restore config", err)
 	}
 	time.Sleep(ciscoRestorePostUploadWait)
 
 	conn, err := connectCisco(node.Host, creds)
 	if err != nil {
-		return err
+		return wrapErr("connect to Cisco", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("cisco connection", conn)
 
 	if _, err := conn.SendCommand("configure terminal"); err != nil {
-		return err
+		return wrapErr("enter Cisco configuration mode", err)
 	}
 	loadResp, err := conn.SendCommand(fmt.Sprintf("load %s", remotePath))
 	if err != nil {
-		return err
+		return wrapErr("load Cisco restore config", err)
 	}
 	if strings.Contains(strings.ToLower(loadResp.Result), "syntax/authorization errors") {
 		detailResp, detailErr := conn.SendCommand("show configuration failed load detail")
@@ -813,10 +890,16 @@ func restoreCisco(node NodeInfo, outDir, platformName string, creds Creds) error
 		if detailErr != nil {
 			return fmt.Errorf("cisco load failed with syntax/authorization errors (detail unavailable): %w", detailErr)
 		}
-		return fmt.Errorf("cisco load failed with syntax/authorization errors:\n%s", strings.TrimSpace(detailResp.Result))
+		return fmt.Errorf(
+			"cisco load failed with syntax/authorization errors:\n%s",
+			strings.TrimSpace(detailResp.Result),
+		)
 	}
 
-	return ciscoCommitReplace(conn)
+	if err := ciscoCommitReplace(conn); err != nil {
+		return wrapErr("commit replace on Cisco", err)
+	}
+	return nil
 }
 
 func ciscoCommitReplace(conn *network.Driver) error {
@@ -831,13 +914,13 @@ func ciscoCommitReplace(conn *network.Driver) error {
 		},
 	}
 	_, err := conn.SendInteractive(events, opoptions.WithPrivilegeLevel("configuration"))
-	return err
+	return wrapErr("send interactive commit replace", err)
 }
 
 func prepareCiscoRestoreConfig(localPath string) (preparedPath string, cleanup func(), err error) {
 	data, err := os.ReadFile(localPath)
 	if err != nil {
-		return "", nil, err
+		return "", nil, wrapErr(fmt.Sprintf("read restore file %q", localPath), err)
 	}
 
 	lines := strings.Split(string(data), "\n")
@@ -857,18 +940,18 @@ func prepareCiscoRestoreConfig(localPath string) (preparedPath string, cleanup f
 
 	tmp, err := os.CreateTemp("", "nck-cisco-restore-*.txt")
 	if err != nil {
-		return "", nil, err
+		return "", nil, wrapErr("create temporary Cisco restore file", err)
 	}
 
 	joined := strings.Join(lines, "\n")
 	if _, err := tmp.WriteString(joined); err != nil {
 		_ = tmp.Close()
 		_ = os.Remove(tmp.Name())
-		return "", nil, err
+		return "", nil, wrapErr("write temporary Cisco restore file", err)
 	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmp.Name())
-		return "", nil, err
+		return "", nil, wrapErr("close temporary Cisco restore file", err)
 	}
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {
 		logrus.Debugf("sanitized Cisco restore config %s -> %s", localPath, tmp.Name())
@@ -885,29 +968,32 @@ func restoreJuniper(node NodeInfo, outDir, platformName string, creds Creds) err
 	if err := scpUpload(node.Host, creds, localPath, remotePath); err != nil {
 		logrus.Warnf("juniper scp upload failed for %s (%s): %v; retrying with sftp", node.Name, node.Host, err)
 		if sftpErr := sftpUpload(node.Host, creds, localPath, remotePath); sftpErr != nil {
-			return fmt.Errorf("juniper upload failed via scp (%v) and sftp (%w)", err, sftpErr)
+			return fmt.Errorf(
+				"juniper upload failed via scp and sftp: %w",
+				errors.Join(err, sftpErr),
+			)
 		}
 	}
 
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
-		return err
+		return wrapErr("connect to Juniper", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("juniper connection", conn)
 
 	if _, err := conn.SendCommand("configure private"); err != nil {
-		return err
+		return wrapErr("enter Juniper private config mode", err)
 	}
 	loadCmd, err := juniperLoadCommand(localPath, remotePath)
 	if err != nil {
-		return err
+		return wrapErr("build Juniper load command", err)
 	}
 	if _, err := conn.SendCommand(loadCmd); err != nil {
-		return err
+		return wrapErr("load Juniper restore config", err)
 	}
 	_, _ = conn.SendCommand("show | compare | no-more")
 	if _, err := conn.SendCommand("commit and-quit"); err != nil {
-		return err
+		return wrapErr("commit Juniper config", err)
 	}
 	_, _ = conn.SendCommand("exit")
 	return nil
@@ -919,24 +1005,24 @@ func restoreSros(node NodeInfo, outDir, platformName string, creds Creds) error 
 	remoteFilename := node.Name + ".txt"
 
 	if err := srosUpload(node.Host, creds, localPath, remoteFilename); err != nil {
-		return err
+		return wrapErr("upload SROS restore config", err)
 	}
 
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
-		return err
+		return wrapErr("connect to SROS", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("sros connection", conn)
 
 	if _, err := conn.SendCommand("environment more false"); err != nil {
-		return err
+		return wrapErr("disable pager on SROS", err)
 	}
 	configs := []string{
 		fmt.Sprintf("load full-replace cf3:%s", remoteFilename),
 		"commit",
 	}
 	if _, err := conn.SendConfigs(configs, opoptions.WithPrivilegeLevel("configuration-private")); err != nil {
-		return err
+		return wrapErr("load and commit SROS config", err)
 	}
 	// Ignore logout errors; the device may close the session immediately.
 	_, _ = conn.SendCommand("logout")
@@ -948,40 +1034,44 @@ func restoreSrl(node NodeInfo, outDir, platformName string, creds Creds) error {
 	localPath := filepath.Join(outDir, node.Name+".json")
 	remotePath := fmt.Sprintf("/home/admin/%s.json", node.Name)
 	if err := sftpUpload(node.Host, creds, localPath, remotePath); err != nil {
-		return err
+		return wrapErr("upload SRL restore config", err)
 	}
 
 	conn, err := connect(platformName, node.Host, creds)
 	if err != nil {
-		return err
+		return wrapErr("connect to SRL", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("srl connection", conn)
 
 	if _, err := conn.SendCommand("enter candidate"); err != nil {
-		return err
+		return wrapErr("enter SRL candidate mode", err)
 	}
 	if _, err := conn.SendCommand(fmt.Sprintf("load file %s.json auto-commit", node.Name)); err != nil {
-		return err
+		return wrapErr("load SRL restore config", err)
 	}
 	_, err = conn.SendCommand("exit all")
-	return err
+	return wrapErr("exit SRL session", err)
 }
 
-func sftpConnect(host string, creds Creds) (*sftp.Client, *ssh.Client, error) {
-	cfg := &ssh.ClientConfig{
+func newSSHClientConfig(creds Creds) *ssh.ClientConfig {
+	return &ssh.ClientConfig{
 		User:            creds.User,
 		Auth:            []ssh.AuthMethod{ssh.Password(creds.Pass)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         30 * time.Second,
 	}
+}
+
+func sftpConnect(host string, creds Creds) (*sftp.Client, *ssh.Client, error) {
+	cfg := newSSHClientConfig(creds)
 	conn, err := ssh.Dial("tcp", host+":22", cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, wrapErr("dial ssh for sftp", err)
 	}
 	client, err := sftp.NewClient(conn)
 	if err != nil {
-		conn.Close()
-		return nil, nil, err
+		closeWithDebug("sftp ssh connection", conn)
+		return nil, nil, wrapErr("create sftp client", err)
 	}
 	return client, conn, nil
 }
@@ -991,27 +1081,29 @@ func sftpDownload(host string, creds Creds, remotePath, localPath string) error 
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	defer client.Close()
+	defer closeWithDebug("sftp ssh connection", conn)
+	defer closeWithDebug("sftp client", client)
 
 	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
-		return err
+		return wrapErr(fmt.Sprintf("create local dir for %q", localPath), err)
 	}
 
 	src, err := client.Open(remotePath)
 	if err != nil {
-		return err
+		return wrapErr(fmt.Sprintf("open remote file %q", remotePath), err)
 	}
-	defer src.Close()
+	defer closeWithDebug("sftp source file", src)
 
 	dst, err := os.Create(localPath)
 	if err != nil {
-		return err
+		return wrapErr(fmt.Sprintf("create local file %q", localPath), err)
 	}
-	defer dst.Close()
+	defer closeWithDebug("sftp destination file", dst)
 
-	_, err = io.Copy(dst, src)
-	return err
+	if _, err := io.Copy(dst, src); err != nil {
+		return wrapErr("copy sftp download content", err)
+	}
+	return nil
 }
 
 func sftpUpload(host string, creds Creds, localPath, remotePath string) error {
@@ -1019,23 +1111,25 @@ func sftpUpload(host string, creds Creds, localPath, remotePath string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	defer client.Close()
+	defer closeWithDebug("sftp ssh connection", conn)
+	defer closeWithDebug("sftp client", client)
 
 	src, err := os.Open(localPath)
 	if err != nil {
-		return err
+		return wrapErr(fmt.Sprintf("open local file %q", localPath), err)
 	}
-	defer src.Close()
+	defer closeWithDebug("sftp source file", src)
 
 	dst, err := client.Create(remotePath)
 	if err != nil {
-		return err
+		return wrapErr(fmt.Sprintf("create remote file %q", remotePath), err)
 	}
-	defer dst.Close()
+	defer closeWithDebug("sftp destination file", dst)
 
-	_, err = io.Copy(dst, src)
-	return err
+	if _, err := io.Copy(dst, src); err != nil {
+		return wrapErr("copy sftp upload content", err)
+	}
+	return nil
 }
 
 func scpUpload(host string, creds Creds, localPath, remotePath string) error {
@@ -1047,78 +1141,106 @@ func scpUpload(host string, creds Creds, localPath, remotePath string) error {
 	}
 	conn, err := ssh.Dial("tcp", host+":22", cfg)
 	if err != nil {
-		return err
+		return wrapErr("dial ssh for scp", err)
 	}
-	defer conn.Close()
+	defer closeWithDebug("scp ssh connection", conn)
 
-	session, err := conn.NewSession()
+	session, stdin, outReader, errReader, err := prepareSCPSession(conn)
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer closeWithDebug("scp ssh session", session)
+
+	src, size, err := openSCPSource(localPath)
+	if err != nil {
+		return err
+	}
+	defer closeWithDebug("scp source file", src)
+
+	if err := session.Start(fmt.Sprintf("scp -t %s", remotePath)); err != nil {
+		return wrapErr("start scp session", err)
+	}
+	if err := scpSendFile(stdin, src, size, filepath.Base(remotePath), outReader, errReader); err != nil {
+		return err
+	}
+	if err := stdin.Close(); err != nil {
+		return wrapErr("close scp stdin", err)
+	}
+	if err := session.Wait(); err != nil {
+		return wrapErr("wait for scp session", err)
+	}
+	return nil
+}
+
+func prepareSCPSession(conn *ssh.Client) (*ssh.Session, io.WriteCloser, *bufio.Reader, *bufio.Reader, error) {
+	session, err := conn.NewSession()
+	if err != nil {
+		return nil, nil, nil, nil, wrapErr("create ssh session for scp", err)
+	}
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		return err
+		closeWithDebug("scp ssh session", session)
+		return nil, nil, nil, nil, wrapErr("open scp stdin pipe", err)
 	}
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		return err
+		closeWithDebug("scp ssh session", session)
+		return nil, nil, nil, nil, wrapErr("open scp stdout pipe", err)
 	}
 	stderr, err := session.StderrPipe()
 	if err != nil {
-		return err
+		closeWithDebug("scp ssh session", session)
+		return nil, nil, nil, nil, wrapErr("open scp stderr pipe", err)
 	}
+	return session, stdin, bufio.NewReader(stdout), bufio.NewReader(stderr), nil
+}
 
+func openSCPSource(localPath string) (*os.File, int64, error) {
 	src, err := os.Open(localPath)
 	if err != nil {
-		return err
+		return nil, 0, wrapErr(fmt.Sprintf("open local file %q for scp", localPath), err)
 	}
-	defer src.Close()
-
 	info, err := src.Stat()
 	if err != nil {
-		return err
+		closeWithDebug("scp source file", src)
+		return nil, 0, wrapErr("stat local file for scp", err)
 	}
+	return src, info.Size(), nil
+}
 
-	if err := session.Start(fmt.Sprintf("scp -t %s", remotePath)); err != nil {
-		return err
-	}
-
-	outReader := bufio.NewReader(stdout)
-	errReader := bufio.NewReader(stderr)
-
+func scpSendFile(
+	stdin io.Writer,
+	src io.Reader,
+	size int64,
+	remoteBase string,
+	outReader, errReader *bufio.Reader,
+) error {
 	if err := scpReadAck(outReader, errReader); err != nil {
-		return err
+		return wrapErr("read initial scp ack", err)
 	}
-
-	if _, err := fmt.Fprintf(stdin, "C0644 %d %s\n", info.Size(), filepath.Base(remotePath)); err != nil {
-		return err
+	if _, err := fmt.Fprintf(stdin, "C0644 %d %s\n", size, remoteBase); err != nil {
+		return wrapErr("send scp file metadata", err)
 	}
 	if err := scpReadAck(outReader, errReader); err != nil {
-		return err
+		return wrapErr("read scp metadata ack", err)
 	}
-
 	if _, err := io.Copy(stdin, src); err != nil {
-		return err
+		return wrapErr("stream file content over scp", err)
 	}
 	if _, err := stdin.Write([]byte{0}); err != nil {
-		return err
+		return wrapErr("send scp end-of-file marker", err)
 	}
 	if err := scpReadAck(outReader, errReader); err != nil {
-		return err
+		return wrapErr("read final scp ack", err)
 	}
-
-	if err := stdin.Close(); err != nil {
-		return err
-	}
-	return session.Wait()
+	return nil
 }
 
 func scpReadAck(outReader, errReader *bufio.Reader) error {
 	code, err := outReader.ReadByte()
 	if err != nil {
-		return err
+		return wrapErr("read scp ack byte", err)
 	}
 	switch code {
 	case 0:
@@ -1142,9 +1264,9 @@ func scpReadAck(outReader, errReader *bufio.Reader) error {
 func juniperLoadCommand(localPath, remotePath string) (string, error) {
 	f, err := os.Open(localPath)
 	if err != nil {
-		return "", err
+		return "", wrapErr(fmt.Sprintf("open Juniper restore file %q", localPath), err)
 	}
-	defer f.Close()
+	defer closeWithDebug("juniper restore file", f)
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -1158,7 +1280,7 @@ func juniperLoadCommand(localPath, remotePath string) (string, error) {
 		return fmt.Sprintf("load override %s", remotePath), nil
 	}
 	if err := scanner.Err(); err != nil {
-		return "", err
+		return "", wrapErr("scan Juniper restore file", err)
 	}
 	return fmt.Sprintf("load override %s", remotePath), nil
 }
@@ -1210,8 +1332,10 @@ func logStatus(outDir, message string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer closeWithDebug("status log file", f)
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05 MST")
-	fmt.Fprintf(f, "%s - %s\n", timestamp, message)
+	if _, err := fmt.Fprintf(f, "%s - %s\n", timestamp, message); err != nil {
+		logrus.Debugf("failed writing status log %q: %v", path, err)
+	}
 }

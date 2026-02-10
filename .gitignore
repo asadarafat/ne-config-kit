@@ -18,6 +18,9 @@ example/*.clab.yml.annotations.json
 **/.vault_pass
 image/ansible-config/group_vars/routers/vault.yml
 ref-plan.md
+plan.md
 backup-restore.sh
 bash-cisco-restore.sh
 bash-juniper-restore.sh
+.cache/
+.config/
